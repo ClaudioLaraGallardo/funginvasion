@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FUNGI AR</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; width:100vw; height:100vh; touch-action:none; }
+
+  #video {
+    position:fixed; inset:0; width:100%; height:100%;
+    object-fit:cover; z-index:1;
+  }
+
+  /* hidden processing canvases */
+  #edgeCanvas, #sampleCanvas {
+    position:fixed; top:0; left:0;
+    display:none;
+  }
+
+  /* main AR overlay */
+  #arCanvas {
+    position:fixed; inset:0; width:100%; height:100%;
+    z-index:2; pointer-events:none;
+  }
+
+  #touch { position:fixed; inset:0; z-index:3; }
+
+  /* HUD */
+  #hud {
+    position:fixed; top:0; left:0; right:0; z-index:10;
+    pointer-events:none; padding:16px 18px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+  }
+  .htitle {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(20px,5.5vw,32px);
+    letter-spacing:.2em; color:#c084fc;
+    text-shadow:0 0 18px #a855f766; line-height:1;
+  }
+  .hsub { font-family:'Space Mono',monospace; font-size:8px; color:#a855f744; letter-spacing:.2em; margin-top:3px; }
+  .hstats { font-family:'Space Mono',monospace; font-size:8px; color:#c084fc66; letter-spacing:.08em; line-height:1.9; text-align:right; }
+
+  #infect {
+    position:fixed; bottom:26px; left:50%; transform:translateX(-50%);
+    z-index:10; pointer-events:none;
+    display:flex; align-items:center; gap:9px;
+  }
+  .il { font-family:'Space Mono',monospace; font-size:8px; color:#a855f755; letter-spacing:.15em; white-space:nowrap; }
+  .itrack { width:90px; height:1px; background:#a855f720; }
+  .ifill { height:100%; background:linear-gradient(90deg,#6d28d9,#c084fc); box-shadow:0 0 5px #a855f7; width:0%; transition:width .6s; }
+  .ipct { font-family:'Space Mono',monospace; font-size:8px; color:#c084fc66; width:26px; }
+
+  /* START SCREEN */
+  #start {
+    position:fixed; inset:0; z-index:20;
+    background:radial-gradient(ellipse at 50% 55%, #0e0318 0%, #030008 100%);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    transition:opacity 1.4s;
+  }
+  #bgc { position:absolute; inset:0; pointer-events:none; }
+  .si { position:relative; z-index:2; text-align:center; padding:36px; }
+  .si h1 {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:clamp(70px,19vw,115px);
+    color:#c084fc; letter-spacing:.14em; line-height:.85;
+    text-shadow:0 0 50px #a855f777, 0 0 100px #7c3aed44;
+    animation:glow 3.5s ease-in-out infinite;
+  }
+  @keyframes glow {
+    0%,100%{text-shadow:0 0 50px #a855f777,0 0 100px #7c3aed44;}
+    50%{text-shadow:0 0 80px #c084fcaa,0 0 140px #a855f766,0 0 200px #7c3aed44;}
+  }
+  .si .sub { font-family:'Space Mono',monospace; font-size:9px; letter-spacing:.38em; color:#a855f744; margin:6px 0 44px; }
+  .btn {
+    font-family:'Space Mono',monospace; font-size:10px;
+    letter-spacing:.22em; color:#e9d5ff;
+    background:transparent; border:1px solid #a855f733;
+    padding:16px 40px; cursor:pointer; transition:all .3s; position:relative; overflow:hidden;
+  }
+  .btn::after { content:''; position:absolute; inset:0; background:#a855f712; transform:scaleX(0); transform-origin:left; transition:transform .3s; }
+  .btn:hover::after,.btn:active::after{transform:scaleX(1);}
+  .btn:hover{border-color:#c084fc; box-shadow:0 0 20px #a855f730;}
+  .hint { font-family:'Space Mono',monospace; font-size:7px; color:#a855f730; letter-spacing:.22em; margin-top:18px; }
+
+  #scanoverlay {
+    position:fixed; inset:0; z-index:9; pointer-events:none;
+    background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.04) 2px, rgba(0,0,0,.04) 4px);
+  }
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="edgeCanvas"></canvas>
+<canvas id="sampleCanvas"></canvas>
+<canvas id="arCanvas"></canvas>
+<div id="scanoverlay"></div>
+<div id="touch"></div>
+
+<div id="hud">
+  <div><div class="htitle">FUNGI</div><div class="hsub">SURFACE DETECTION AR</div></div>
+  <div class="hstats">
+    COLONIAS: <span id="sCol">0</span><br>
+    RAMAS: <span id="sBra">0</span><br>
+    COBERTURA: <span id="sCov">0</span>%
+  </div>
+</div>
+<div id="infect">
+  <span class="il">INFECCIÓN</span>
+  <div class="itrack"><div class="ifill" id="ifill"></div></div>
+  <span class="ipct" id="ipct">0%</span>
+</div>
+
+<div id="start">
+  <canvas id="bgc"></canvas>
+  <div class="si">
+    <h1>FUNGI</h1>
+    <p class="sub">AR · DETECCIÓN DE SUPERFICIES</p>
+    <button class="btn" id="startBtn">INICIAR INVASIÓN</button>
+    <p class="hint">TOCA PARA SEMBRAR · SE ADAPTA A LAS SUPERFICIES</p>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  SETUP
+// ═══════════════════════════════════════════════════════════
+const video       = document.getElementById('video');
+const arCanvas    = document.getElementById('arCanvas');
+const edgeCanvas  = document.getElementById('edgeCanvas');
+const sampleCanvas= document.getElementById('sampleCanvas');
+const ctx         = arCanvas.getContext('2d');
+const edgeCtx     = edgeCanvas.getContext('2d', {willReadFrequently:true});
+const sampleCtx   = sampleCanvas.getContext('2d', {willReadFrequently:true});
+
+// Processing resolution (low for perf)
+const PW = 160, PH = 90;
+edgeCanvas.width  = PW; edgeCanvas.height = PH;
+sampleCanvas.width= PW; sampleCanvas.height= PH;
+
+function resize() {
+  arCanvas.width  = window.innerWidth;
+  arCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Scale factors from processing to screen
+const sx = () => arCanvas.width  / PW;
+const sy = () => arCanvas.height / PH;
+
+// ═══════════════════════════════════════════════════════════
+//  EDGE MAP — updated every N frames
+// ═══════════════════════════════════════════════════════════
+let edgeMap = new Float32Array(PW * PH); // 0..1 edge strength
+let edgeUpdateInterval = 12; // frames between edge updates
+let edgeFrame = 0;
+let edgeReady = false;
+
+function updateEdgeMap() {
+  // Draw video to small canvas
+  sampleCtx.drawImage(video, 0, 0, PW, PH);
+  const imgData = sampleCtx.getImageData(0, 0, PW, PH);
+  const d = imgData.data;
+
+  // Grayscale
+  const gray = new Float32Array(PW * PH);
+  for (let i=0; i<PW*PH; i++) {
+    gray[i] = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114) / 255;
+  }
+
+  // Sobel edge detection
+  const newMap = new Float32Array(PW * PH);
+  for (let y=1; y<PH-1; y++) {
+    for (let x=1; x<PW-1; x++) {
+      const g = (i) => gray[i];
+      const i = y*PW + x;
+      const gx = -g(i-PW-1) + g(i-PW+1) - 2*g(i-1) + 2*g(i+1) - g(i+PW-1) + g(i+PW+1);
+      const gy = -g(i-PW-1) - 2*g(i-PW) - g(i-PW+1) + g(i+PW-1) + 2*g(i+PW) + g(i+PW+1);
+      newMap[i] = Math.min(1, Math.sqrt(gx*gx + gy*gy) * 2.5);
+    }
+  }
+
+  // Smooth/blend with previous map for temporal stability
+  for (let i=0; i<PW*PH; i++) {
+    edgeMap[i] = edgeMap[i] * 0.4 + newMap[i] * 0.6;
+  }
+  edgeReady = true;
+}
+
+// Sample edge strength at screen coordinate
+function edgeAt(screenX, screenY) {
+  if (!edgeReady) return 0;
+  const px = Math.round(screenX / sx());
+  const py = Math.round(screenY / sy());
+  if (px<0||px>=PW||py<0||py>=PH) return 0;
+  return edgeMap[py*PW + px];
+}
+
+// Find nearby high-edge point (surface anchor)
+function findEdgeAnchor(screenX, screenY, radius=60) {
+  const steps = 24;
+  let bestVal = 0, bestX = screenX, bestY = screenY;
+  for (let i=0; i<steps; i++) {
+    const angle = (i/steps) * Math.PI * 2;
+    const r = radius * (0.3 + Math.random() * 0.7);
+    const tx = screenX + Math.cos(angle)*r;
+    const ty = screenY + Math.sin(angle)*r;
+    const v = edgeAt(tx, ty);
+    if (v > bestVal) { bestVal = v; bestX = tx; bestY = ty; }
+  }
+  return { x: bestX, y: bestY, strength: bestVal };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BRANCH — single coral/mycelium arm
+// ═══════════════════════════════════════════════════════════
+class Branch {
+  constructor(x, y, angle, depth, colony) {
+    this.x = x; this.y = y;
+    this.angle = angle;
+    this.depth = depth;
+    this.colony = colony;
+    this.points = [{x, y}]; // grown path
+    this.stepLen = 6 + Math.random()*10 - depth;
+    this.stepLen = Math.max(3, this.stepLen);
+    this.thick = Math.max(0.3, 2.8 - depth*0.38);
+    this.hue = colony.hue + (Math.random()-.5)*35;
+    this.speed = 0.8 + Math.random()*1.2;
+    this.accrued = 0; // distance grown this tick
+    this.totalLen = 30 + Math.random()*80 - depth*8;
+    this.totalLen = Math.max(15, this.totalLen);
+    this.grown = 0;
+    this.done = false;
+    this.nodeSpawned = false;
+    this.edgeFollow = 0.55 + Math.random()*0.35; // how much it follows edges
+    this.wiggle = 0;
+  }
+
+  step() {
+    if (this.done) return;
+    for (let s=0; s<this.speed; s++) {
+      if (this.grown >= this.totalLen) { this.done = true; return; }
+
+      // Look ahead several angles, pick one that follows edge best
+      const candidates = 7;
+      let bestAngle = this.angle, bestScore = -1;
+      for (let c=0; c<candidates; c++) {
+        const spread = (Math.PI * 0.35) * (c/(candidates-1) - 0.5);
+        const testAngle = this.angle + spread;
+        const lookDist = this.stepLen * 1.5;
+        const tx = this.x + Math.cos(testAngle)*lookDist;
+        const ty = this.y + Math.sin(testAngle)*lookDist;
+        const e = edgeAt(tx, ty);
+        // score: edge following + forward bias + slight randomness
+        const forwardBias = Math.cos(spread) * 0.3;
+        const score = e * this.edgeFollow + forwardBias + Math.random()*0.2*(1-this.edgeFollow);
+        if (score > bestScore) { bestScore = score; bestAngle = testAngle; }
+      }
+
+      // Smooth angle update
+      this.wiggle += (bestAngle - this.angle) * 0.35;
+      this.wiggle *= 0.75;
+      this.angle += this.wiggle * 0.5 + (Math.random()-.5)*0.08;
+
+      this.x += Math.cos(this.angle) * this.stepLen * 0.1;
+      this.y += Math.sin(this.angle) * this.stepLen * 0.1;
+      this.grown += this.stepLen * 0.1;
+      this.accrued += this.stepLen * 0.1;
+
+      // Record point every ~4px
+      if (this.accrued >= 4) {
+        this.accrued = 0;
+        this.points.push({x:this.x, y:this.y});
+      }
+
+      // Keep in bounds
+      if (this.x < 0 || this.x > arCanvas.width || this.y < 0 || this.y > arCanvas.height) {
+        this.done = true; return;
+      }
+    }
+  }
+
+  draw() {
+    if (this.points.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = this.colony.opacity;
+    ctx.strokeStyle = `hsl(${this.hue}, ${this.colony.sat}%, 62%)`;
+    ctx.lineWidth = this.thick;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = 8 + this.depth;
+    ctx.shadowColor = `hsl(${this.hue}, 80%, 55%)`;
+    ctx.beginPath();
+    ctx.moveTo(this.points[0].x, this.points[0].y);
+    for (let i=1; i<this.points.length; i++) ctx.lineTo(this.points[i].x, this.points[i].y);
+    // live tip
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COLONY
+// ═══════════════════════════════════════════════════════════
+class Colony {
+  constructor(x, y) {
+    // Try to anchor on nearby edge
+    const anchor = findEdgeAnchor(x, y, 80);
+    this.x = anchor.strength > 0.15 ? anchor.x : x;
+    this.y = anchor.strength > 0.15 ? anchor.y : y;
+    this.hue = 262 + Math.random()*50;
+    this.sat = 60 + Math.random()*30;
+    this.opacity = 0;
+    this.branches = [];
+    this.nodes = [];
+    this.age = 0;
+    this.maxBranches = 35 + Math.floor(Math.random()*55);
+    this.splitTimer = 0;
+    this.splitInterval = 8 + Math.random()*12;
+    this.sporeTimer = 60 + Math.random()*120;
+
+    // Seed initial arms
+    const arms = 2 + Math.floor(Math.random()*3);
+    for (let i=0; i<arms; i++) {
+      const angle = (i/arms)*Math.PI*2 + (Math.random()-.5)*.8;
+      this.branches.push(new Branch(this.x, this.y, angle, 0, this));
+    }
+  }
+
+  update() {
+    this.age++;
+    this.opacity = Math.min(0.88, this.opacity + 0.016);
+    this.splitTimer++; this.sporeTimer--;
+
+    // Step all branches
+    this.branches.forEach(b => b.step());
+
+    // Spawn child branches from done tips
+    if (this.splitTimer > this.splitInterval && this.branches.length < this.maxBranches) {
+      this.splitTimer = 0;
+      const donors = this.branches.filter(b => b.done && b.depth < 7);
+      if (donors.length > 0) {
+        const p = donors[Math.floor(Math.random()*donors.length)];
+        const spread = 0.55 + p.depth * 0.08;
+        const n = p.depth < 3 && Math.random()<.5 ? 2 : 1;
+        for (let i=0; i<n; i++) {
+          const a = p.angle + (Math.random()-.5)*spread*2;
+          this.branches.push(new Branch(p.x, p.y, a, p.depth+1, this));
+        }
+        // Spawn node cluster
+        this.nodes.push({
+          x: p.x, y: p.y,
+          r: 3 + Math.random()*11,
+          hue: p.hue, t: 0,
+          pulse: Math.random()*Math.PI*2
+        });
+      }
+    }
+
+    this.nodes.forEach(n => { n.t = Math.min(1, n.t+.04); n.pulse += .03; });
+
+    // Emit spores
+    if (this.sporeTimer <= 0 && this.nodes.length > 0) {
+      this.sporeTimer = 40 + Math.random()*100;
+      const n = this.nodes[Math.floor(Math.random()*this.nodes.length)];
+      const count = 2 + Math.floor(Math.random()*4);
+      for (let i=0;i<count;i++) spores.push(new Spore(n.x, n.y));
+      if (Math.random()<.2) clouds.push(new Cloud(n.x, n.y));
+    }
+  }
+
+  draw() {
+    ctx.save(); ctx.globalAlpha = this.opacity;
+    this.branches.forEach(b => b.draw());
+
+    // Cluster nodes
+    this.nodes.forEach(n => {
+      if (n.t <= 0) return;
+      const pulse = 1 + Math.sin(n.pulse)*0.08;
+      const nr = n.r * n.t * pulse;
+      ctx.save();
+
+      // Outer atmospheric glow
+      ctx.globalAlpha = this.opacity * n.t * 0.13;
+      const g3 = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,nr*3.5);
+      g3.addColorStop(0,`hsl(${n.hue},70%,60%)`); g3.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(n.x,n.y,nr*3.5,0,Math.PI*2);
+      ctx.fillStyle=g3; ctx.fill();
+
+      // Mid glow
+      ctx.globalAlpha = this.opacity * n.t * 0.35;
+      const g2 = ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,nr*1.8);
+      g2.addColorStop(0,`hsl(${n.hue},80%,70%)`);
+      g2.addColorStop(.5,`hsl(${n.hue},70%,45%)`);
+      g2.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(n.x,n.y,nr*1.8,0,Math.PI*2);
+      ctx.fillStyle=g2; ctx.shadowBlur=15; ctx.shadowColor=`hsl(${n.hue},80%,60%)`;
+      ctx.fill();
+
+      // Core
+      ctx.globalAlpha = this.opacity * n.t * 0.75;
+      ctx.beginPath(); ctx.arc(n.x,n.y,nr*.45,0,Math.PI*2);
+      ctx.fillStyle=`hsl(${n.hue},90%,82%)`;
+      ctx.shadowBlur=12; ctx.fill();
+
+      ctx.restore();
+    });
+
+    ctx.restore();
+  }
+
+  get totalBranches() { return this.branches.length; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SPORE
+// ═══════════════════════════════════════════════════════════
+class Spore {
+  constructor(x,y) {
+    this.x=x; this.y=y;
+    this.vx=(Math.random()-.5)*2.4;
+    this.vy=-(0.15+Math.random()*2.1);
+    this.life=1; this.decay=0.003+Math.random()*.008;
+    this.r=0.7+Math.random()*2.2;
+    this.hue=262+Math.random()*55;
+    this.landed=false;
+  }
+  update() {
+    this.x+=this.vx; this.y+=this.vy;
+    this.vy+=0.011; this.vx+=(Math.random()-.5)*.04;
+    this.life-=this.decay;
+    // chance to spawn colony where edge is strong
+    if (!this.landed && this.life<0.28 && Math.random()<.004 && colonies.length<35) {
+      const e = edgeAt(this.x, this.y);
+      if (e > 0.1 || Math.random()<.3) {
+        colonies.push(new Colony(this.x, this.y));
+        this.landed = true;
+      }
+    }
+  }
+  draw() {
+    ctx.save(); ctx.globalAlpha=this.life*.72;
+    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*3);
+    g.addColorStop(0,`hsl(${this.hue},90%,85%)`); g.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r*3,0,Math.PI*2);
+    ctx.fillStyle=g; ctx.shadowBlur=9; ctx.shadowColor=`hsl(${this.hue},80%,65%)`;
+    ctx.fill(); ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CLOUD PUFF
+// ═══════════════════════════════════════════════════════════
+class Cloud {
+  constructor(x,y) {
+    this.x=x+(Math.random()-.5)*55; this.y=y;
+    this.r=12+Math.random()*52;
+    this.vx=(Math.random()-.5)*.28; this.vy=-(0.06+Math.random()*.32);
+    this.life=.4+Math.random()*.5; this.decay=.0012+Math.random()*.0025;
+    this.hue=262+Math.random()*42;
+  }
+  update(){this.x+=this.vx;this.y+=this.vy;this.r+=.12;this.life-=this.decay;}
+  draw(){
+    ctx.save(); ctx.globalAlpha=this.life*.15;
+    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r);
+    g.addColorStop(0,`hsla(${this.hue},65%,58%,1)`);
+    g.addColorStop(.5,`hsla(${this.hue},55%,38%,.55)`);
+    g.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fillStyle=g; ctx.fill(); ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATE & MAIN LOOP
+// ═══════════════════════════════════════════════════════════
+let colonies=[], spores=[], clouds=[];
+let running=false, frameCount=0;
+
+// Auto-seed: fires colonies at high-edge zones
+let autoSeedTimer = 0;
+function autoSeed() {
+  if (colonies.length >= 25) return;
+  // Sample random points, seed where edge strength is high
+  let planted = 0;
+  for (let tries=0; tries<80 && planted<2; tries++) {
+    const px = Math.random()*PW, py = Math.random()*PH;
+    const e = edgeMap[Math.round(py)*PW + Math.round(px)];
+    if (e > 0.2 || (colonies.length < 3 && Math.random()<.15)) {
+      const sx2 = px * (arCanvas.width/PW);
+      const sy2 = py * (arCanvas.height/PH);
+      colonies.push(new Colony(sx2, sy2));
+      for (let i=0;i<6;i++) spores.push(new Spore(sx2,sy2-5));
+      planted++;
+    }
+  }
+}
+
+function drawVignette() {
+  const g=ctx.createRadialGradient(arCanvas.width/2,arCanvas.height/2,arCanvas.height*.08,arCanvas.width/2,arCanvas.height/2,arCanvas.height*.88);
+  g.addColorStop(0,'transparent'); g.addColorStop(1,'rgba(3,0,10,.52)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,arCanvas.width,arCanvas.height);
+}
+
+function drawCorners(){
+  const sz=16; ctx.save(); ctx.strokeStyle='#a855f71a'; ctx.lineWidth=1;
+  [[10,10,1,1],[arCanvas.width-10,10,-1,1],[10,arCanvas.height-10,1,-1],[arCanvas.width-10,arCanvas.height-10,-1,-1]].forEach(([x,y,dx,dy])=>{
+    ctx.beginPath(); ctx.moveTo(x,y+dy*sz); ctx.lineTo(x,y); ctx.lineTo(x+dx*sz,y); ctx.stroke();
+  }); ctx.restore();
+}
+
+function updateHUD() {
+  const totalBranches = colonies.reduce((a,c)=>a+c.totalBranches,0);
+  const cov = Math.min(100, colonies.length*3 + spores.length*.2 + totalBranches*.05);
+  document.getElementById('sCol').textContent=colonies.length;
+  document.getElementById('sBra').textContent=totalBranches;
+  document.getElementById('sCov').textContent=Math.round(cov);
+  document.getElementById('ifill').style.width=cov+'%';
+  document.getElementById('ipct').textContent=Math.round(cov)+'%';
+}
+
+function loop() {
+  frameCount++;
+
+  // Update edge map periodically
+  if (frameCount % edgeUpdateInterval === 0 && video.readyState >= 2) {
+    updateEdgeMap();
+  }
+
+  // Auto-seed new colonies on edges
+  autoSeedTimer++;
+  if (autoSeedTimer > 90 && edgeReady) {
+    autoSeedTimer = 0;
+    autoSeed();
+  }
+
+  ctx.clearRect(0,0,arCanvas.width,arCanvas.height);
+  drawVignette();
+
+  clouds=clouds.filter(c=>c.life>0); clouds.forEach(c=>{c.update();c.draw();});
+  colonies.forEach(col=>{col.update();col.draw();});
+  spores=spores.filter(s=>s.life>0); spores.forEach(s=>{s.update();s.draw();});
+
+  drawCorners();
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+// Touch → manual seed
+document.getElementById('touch').addEventListener('pointerdown', e=>{
+  if (!running) return;
+  colonies.push(new Colony(e.clientX, e.clientY));
+  for(let i=0;i<16;i++) spores.push(new Spore(e.clientX+(Math.random()-.5)*25,e.clientY));
+  for(let i=0;i<5;i++) clouds.push(new Cloud(e.clientX, e.clientY));
+});
+
+// ═══════════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════════
+async function startCam() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} },
+      audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    return true;
+  } catch {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      video.srcObject = stream;
+      await video.play();
+      return true;
+    } catch { return false; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  START SCREEN
+// ═══════════════════════════════════════════════════════════
+const bgc = document.getElementById('bgc');
+const bctx = bgc.getContext('2d');
+bgc.width = window.innerWidth; bgc.height = window.innerHeight;
+const bgParticles = Array.from({length:90},()=>({
+  x:Math.random()*bgc.width, y:Math.random()*bgc.height,
+  r:.5+Math.random()*2.5,
+  vx:(Math.random()-.5)*.3, vy:-(0.06+Math.random()*.45),
+  life:Math.random(), decay:.0012+Math.random()*.003,
+  hue:255+Math.random()*55
+}));
+let bgRunning=true;
+function animBg(){
+  if(!bgRunning)return;
+  bctx.clearRect(0,0,bgc.width,bgc.height);
+  bgParticles.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.life-=p.decay;
+    if(p.life<0){p.life=.7+Math.random()*.4;p.y=bgc.height+5;p.x=Math.random()*bgc.width;}
+    bctx.save(); bctx.globalAlpha=p.life*.6;
+    const g=bctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+    g.addColorStop(0,`hsl(${p.hue},85%,72%)`); g.addColorStop(1,'transparent');
+    bctx.beginPath(); bctx.arc(p.x,p.y,p.r*3,0,Math.PI*2);
+    bctx.fillStyle=g; bctx.fill(); bctx.restore();
+  });
+  requestAnimationFrame(animBg);
+}
+animBg();
+
+document.getElementById('startBtn').addEventListener('click', async ()=>{
+  await startCam();
+  bgRunning=false;
+  const startEl=document.getElementById('start');
+  startEl.style.opacity='0';
+  setTimeout(()=>{startEl.style.display='none';},1400);
+  running=true;
+  loop();
+});
+</script>
+</body>
+</html>
