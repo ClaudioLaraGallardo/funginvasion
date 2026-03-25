@@ -29,7 +29,7 @@ body{background:#000;overflow:hidden;touch-action:none;}
   <p style="font-size:9px;opacity:.3">Toca para sembrar</p>
 </div>
 <script>
-const C=document.getElementById('c'), X=C.getContext('2d');
+const C=document.getElementById('c'),X=C.getContext('2d');
 const V=document.getElementById('v');
 const SC=document.createElement('canvas');
 SC.width=80;SC.height=45;
@@ -38,7 +38,7 @@ function rsz(){C.width=innerWidth;C.height=innerHeight;}
 rsz();window.addEventListener('resize',rsz);
 
 // ── Edge map ──────────────────────────────────────────────
-let EM=new Float32Array(3600), eR=false, fN=0;
+let EM=new Float32Array(3600),eR=false,fN=0;
 function updE(){
   if(V.readyState<2)return;
   SX.drawImage(V,0,0,80,45);
@@ -55,7 +55,9 @@ function updE(){
 }
 function eAt(sx,sy){
   if(!eR)return 0;
-  return EM[Math.max(0,Math.min(44,Math.round(sy/C.height*45)))*80+Math.max(0,Math.min(79,Math.round(sx/C.width*80)))];
+  const px=Math.max(0,Math.min(79,Math.round(sx/C.width*80)));
+  const py=Math.max(0,Math.min(44,Math.round(sy/C.height*45)));
+  return EM[py*80+px];
 }
 function snap(x,y,r){
   let bv=0,bx=x,by=y;
@@ -68,190 +70,180 @@ function snap(x,y,r){
   return bv>0.1?{x:bx,y:by}:{x,y};
 }
 
-// ── Edge-following tendril walker ─────────────────────────
-// This creates the visible mycelium strands that hug surfaces
-class Tendril {
+// ── Coral cluster (drawn first = behind tendrils) ─────────
+function drawCluster(cx,cy,radius,hue,baselit,alpha){
+  if(radius<1||alpha<.01)return;
+  const n=Math.max(2,Math.round(radius/5));
+  X.save();
+  // Outer haze
+  X.globalAlpha=alpha*.1;
+  const gh=X.createRadialGradient(cx,cy,0,cx,cy,radius*2.4);
+  gh.addColorStop(0,`hsl(${hue},60%,${baselit}%)`);
+  gh.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,radius*2.4,0,6.28);X.fillStyle=gh;X.fill();
+  // Lobes
+  for(let i=0;i<n;i++){
+    const la=(i/n)*6.28+(cx*.007+cy*.005);
+    const lr=radius*(.3+((i*7919)%100/100)*.4);
+    const lx=cx+Math.cos(la)*radius*.3,ly=cy+Math.sin(la)*radius*.3;
+    const ll=baselit+8+((i*31)%22);
+    X.globalAlpha=alpha*.72;
+    const g=X.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
+    g.addColorStop(0,`hsl(${hue-8},48%,${Math.min(86,ll+28)}%)`);
+    g.addColorStop(.4,`hsl(${hue},65%,${ll+8}%)`);
+    g.addColorStop(.8,`hsl(${hue+12},60%,${ll}%)`);
+    g.addColorStop(1,`hsl(${hue+22},50%,${Math.max(8,ll-18)}%)`);
+    X.beginPath();
+    const ps=8;
+    for(let p=0;p<=ps;p++){
+      const pa=(p/ps)*6.28;
+      const pv=((p*17+i*31+Math.round(cx))%10)/10;
+      const pr=lr*(.76+pv*.44);
+      p===0?X.moveTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr):X.lineTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr);
+    }
+    X.closePath();
+    X.fillStyle=g;X.shadowBlur=lr*.8;X.shadowColor=`hsl(${hue},72%,${baselit+18}%)`;X.fill();
+  }
+  // Center
+  X.globalAlpha=alpha*.55;
+  const gc=X.createRadialGradient(cx-radius*.14,cy-radius*.18,0,cx,cy,radius*.58);
+  gc.addColorStop(0,`hsl(${hue-12},40%,${Math.min(88,baselit+40)}%)`);
+  gc.addColorStop(.5,`hsl(${hue},52%,${baselit+18}%)`);
+  gc.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,radius*.58,0,6.28);X.fillStyle=gc;X.fill();
+  X.restore();
+}
+
+// ── Draw tendril path ─────────────────────────────────────
+function drawTendril(pts,hue,depth,colOp){
+  if(pts.length<2)return;
+  const lit=35+depth*6;
+  const thick=Math.max(0.8,2.8-depth*.32);
+
+  // Thick glowing outer stroke
+  X.save();
+  X.globalAlpha=colOp*.65;
+  X.strokeStyle=`hsl(${hue},72%,${lit+8}%)`;
+  X.lineWidth=thick*2.2;
+  X.lineCap='round';X.lineJoin='round';
+  X.shadowBlur=thick*6;
+  X.shadowColor=`hsl(${hue},90%,${lit+18}%)`;
+  X.beginPath();
+  X.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++){
+    if(i<pts.length-1){
+      const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;
+      X.quadraticCurveTo(pts[i].x,pts[i].y,mx,my);
+    } else {
+      X.lineTo(pts[i].x,pts[i].y);
+    }
+  }
+  X.stroke();
+  // Bright inner core stroke
+  X.globalAlpha=colOp*.85;
+  X.strokeStyle=`hsl(${hue-5},55%,${Math.min(90,lit+30)}%)`;
+  X.lineWidth=thick*.55;
+  X.shadowBlur=thick*2;
+  X.stroke();
+  X.restore();
+}
+
+// ── Tendril walker ────────────────────────────────────────
+class Tendril{
   constructor(x,y,angle,col,depth){
-    this.x=x; this.y=y; this.a=angle; this.col=col; this.d=depth;
+    this.x=x;this.y=y;this.a=angle;this.col=col;this.d=depth;
     this.pts=[{x,y}];
     this.len=0;
-    this.maxLen=40+Math.random()*80-depth*10;
-    this.maxLen=Math.max(20,this.maxLen);
-    this.step=3+Math.random()*3;
+    this.maxLen=50+Math.random()*70-depth*8;
+    this.maxLen=Math.max(22,this.maxLen);
+    this.stepSz=2.8+Math.random()*2.5;
     this.alive=true;
-    this.spawnAge=15+Math.floor(Math.random()*20);
+    this.spawnAt=18+Math.floor(Math.random()*18);
     this.spawned=false;
-    this.hue=col.hue+depth*5+(Math.random()-.5)*15;
-    this.thick=Math.max(0.5,2.2-depth*.28);
-    this.edgeBias=0.7+Math.random()*0.25; // strongly follows edges
-    this.wgl=0; // wiggle accumulator
+    this.hue=col.hue+depth*5+(Math.random()-.5)*14;
+    this.wgl=0;
   }
-  step_() {
+  advance(){
     if(!this.alive)return;
     if(this.len>=this.maxLen){this.alive=false;return;}
-
-    // Look ahead — strongly prefer edge directions
-    let bScore=-1, bAngle=this.a;
+    // Steer toward edges — 9 candidates
+    let bS=-1,bA=this.a;
     for(let c=0;c<9;c++){
-      const spread=(c/8-.5)*1.0;
-      const ta=this.a+spread;
-      const tx=this.x+Math.cos(ta)*this.step*1.8;
-      const ty=this.y+Math.sin(ta)*this.step*1.8;
+      const sp=(c/8-.5)*.95,ta=this.a+sp;
+      const tx=this.x+Math.cos(ta)*this.stepSz*1.9;
+      const ty=this.y+Math.sin(ta)*this.stepSz*1.9;
       if(tx<2||tx>C.width-2||ty<2||ty>C.height-2)continue;
       const e=eAt(tx,ty);
-      const fwd=Math.cos(spread)*.2;
-      const score=e*this.edgeBias+fwd+Math.random()*(1-this.edgeBias)*.35;
-      if(score>bScore){bScore=score;bAngle=ta;}
+      // Strong edge bias (0.75) + forward momentum + tiny random
+      const score=e*.75+Math.cos(sp)*.18+Math.random()*.07;
+      if(score>bS){bS=score;bA=ta;}
     }
-    // Smooth steering
-    this.wgl+=(bAngle-this.a)*.4; this.wgl*=.7;
-    this.a+=this.wgl*.5+(Math.random()-.5)*.05;
-    this.x+=Math.cos(this.a)*this.step;
-    this.y+=Math.sin(this.a)*this.step;
-    this.len+=this.step;
+    this.wgl+=(bA-this.a)*.42;this.wgl*=.68;
+    this.a+=this.wgl*.5+(Math.random()-.5)*.04;
+    this.x+=Math.cos(this.a)*this.stepSz;
+    this.y+=Math.sin(this.a)*this.stepSz;
+    this.len+=this.stepSz;
     this.pts.push({x:this.x,y:this.y});
-
-    // Spawn child tendrils and coral nodes from tips
-    if(!this.spawned && this.len>=this.spawnAge){
+    if(!this.spawned&&this.len>=this.spawnAt){
       this.spawned=true;
-      if(this.d<5 && this.col.tendrils.length<this.col.maxT){
-        const n=this.d<2?(Math.random()<.55?2:1):1;
+      // Branch into 1–2 new tendrils
+      if(this.d<6&&this.col.tendrils.length<this.col.maxT){
+        const n=this.d<2?(Math.random()<.6?2:1):1;
         for(let i=0;i<n;i++){
-          const da=(Math.random()-.5)*(this.d<2?.9:1.2);
+          const da=(Math.random()-.5)*(this.d<2?.85:1.15);
           this.col.tendrils.push(new Tendril(this.x,this.y,this.a+da,this.col,this.d+1));
         }
       }
-      // Drop a coral cluster at branch point
+      // Drop coral node at branch point
       if(this.col.nodes.length<this.col.maxN){
-        this.col.nodes.push(new CoralNode(this.x,this.y,this.col,this.d));
+        this.col.nodes.push({x:this.x,y:this.y,r:0,tr:(this.d===0?18:this.d===1?12:this.d===2?8:this.d===3?5:3.5)+Math.random()*5,hue:this.hue,lit:18+this.d*8,op:0,gr:.15+Math.random()*.18});
       }
     }
     if(this.x<1||this.x>C.width-1||this.y<1||this.y>C.height-1)this.alive=false;
   }
-  draw(colOp){
-    if(this.pts.length<2)return;
-    const lit=28+this.d*7;
-    X.save();
-    X.globalAlpha=colOp*.75;
-    X.strokeStyle=`hsl(${this.hue},65%,${lit+15}%)`;
-    X.lineWidth=this.thick;
-    X.lineCap='round'; X.lineJoin='round';
-    X.shadowBlur=this.thick*3.5;
-    X.shadowColor=`hsl(${this.hue},80%,${lit+20}%)`;
-    X.beginPath();
-    X.moveTo(this.pts[0].x,this.pts[0].y);
-    for(let i=1;i<this.pts.length;i++){
-      if(i<this.pts.length-1){
-        const mx=(this.pts[i].x+this.pts[i+1].x)/2;
-        const my=(this.pts[i].y+this.pts[i+1].y)/2;
-        X.quadraticCurveTo(this.pts[i].x,this.pts[i].y,mx,my);
-      } else {
-        X.lineTo(this.pts[i].x,this.pts[i].y);
-      }
-    }
-    X.stroke();
-    X.restore();
-  }
-}
-
-// ── Coral cluster node ────────────────────────────────────
-class CoralNode {
-  constructor(x,y,col,depth){
-    this.x=x; this.y=y; this.col=col; this.d=depth;
-    const b=[18,12,8,5,3][Math.min(depth,4)];
-    this.tr=b+Math.random()*b*.6; this.r=0;
-    this.gr=.15+Math.random()*.2;
-    this.hue=col.hue+depth*7+(Math.random()-.5)*12;
-    this.lit=16+depth*8+Math.random()*10;
-    this.op=0;
-  }
-  update(){
-    this.op=Math.min(1,this.op+.04);
-    if(this.r<this.tr) this.r=Math.min(this.tr,this.r+this.gr);
-  }
-  draw(colOp){
-    const r=this.r*this.op; if(r<1)return;
-    const a=colOp*this.op;
-    const n=Math.max(2,Math.round(r/5));
-
-    // Outer glow
-    X.save(); X.globalAlpha=a*.12;
-    const g0=X.createRadialGradient(this.x,this.y,0,this.x,this.y,r*2.5);
-    g0.addColorStop(0,`hsl(${this.hue},65%,${this.lit+5}%)`);
-    g0.addColorStop(1,'transparent');
-    X.beginPath();X.arc(this.x,this.y,r*2.5,0,6.28);X.fillStyle=g0;X.fill();X.restore();
-
-    // Lobes (organic irregular blobs arranged in cluster)
-    for(let i=0;i<n;i++){
-      const la=(i/n)*6.28+this.d*.4+(this.x*.01);
-      const lr=r*(.32+((i*7919)%100/100)*.38);
-      const lx=this.x+Math.cos(la)*r*.3, ly=this.y+Math.sin(la)*r*.3;
-      const lobeLit=this.lit+10+((i*31)%20);
-      X.save(); X.globalAlpha=a*.75;
-      const g=X.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
-      g.addColorStop(0,`hsl(${this.hue-8},50%,${Math.min(88,lobeLit+28)}%)`);
-      g.addColorStop(.4,`hsl(${this.hue},65%,${lobeLit+8}%)`);
-      g.addColorStop(.8,`hsl(${this.hue+12},60%,${lobeLit}%)`);
-      g.addColorStop(1,`hsl(${this.hue+22},52%,${Math.max(8,lobeLit-18)}%)`);
-      X.beginPath();
-      // Slightly irregular polygon
-      const ps=8;
-      for(let p=0;p<=ps;p++){
-        const pa=(p/ps)*6.28;
-        const pv=((p*17+i*31+Math.round(this.x))%10)/10;
-        const pr=lr*(.78+pv*.44);
-        p===0?X.moveTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr):X.lineTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr);
-      }
-      X.closePath();
-      X.fillStyle=g;
-      X.shadowBlur=lr*.8; X.shadowColor=`hsl(${this.hue},75%,${this.lit+18}%)`;
-      X.fill(); X.restore();
-    }
-    // Center cap
-    X.save(); X.globalAlpha=a*.6;
-    const gc=X.createRadialGradient(this.x-r*.15,this.y-r*.2,0,this.x,this.y,r*.6);
-    gc.addColorStop(0,`hsl(${this.hue-12},42%,${Math.min(90,this.lit+40)}%)`);
-    gc.addColorStop(.5,`hsl(${this.hue},55%,${this.lit+18}%)`);
-    gc.addColorStop(1,'transparent');
-    X.beginPath();X.arc(this.x,this.y,r*.6,0,6.28);X.fillStyle=gc;X.fill();X.restore();
-  }
 }
 
 // ── Colony ────────────────────────────────────────────────
-class Colony {
+class Colony{
   constructor(x,y){
     const s=snap(x,y,90);
-    this.x=s.x; this.y=s.y; this.op=0; this.age=0;
-    this.hue=248+Math.random()*38;
-    this.tendrils=[]; this.nodes=[];
-    this.maxT=28+Math.floor(Math.random()*22);
-    this.maxN=18+Math.floor(Math.random()*18);
-    this.spt=55+Math.random()*55;
-    // Seed initial tendrils radiating from anchor
+    this.x=s.x;this.y=s.y;this.op=0;this.age=0;
+    this.hue=250+Math.random()*35;
+    this.tendrils=[];this.nodes=[];
+    this.maxT=30+Math.floor(Math.random()*20);
+    this.maxN=20+Math.floor(Math.random()*16);
+    this.spt=55+Math.random()*50;
+    // Seed arms
     const arms=2+Math.floor(Math.random()*3);
-    for(let i=0;i<arms;i++){
-      const a=(i/arms)*6.28+Math.random()*.6;
-      this.tendrils.push(new Tendril(this.x,this.y,a,this,0));
-    }
-    // Initial coral node at root
-    this.nodes.push(new CoralNode(this.x,this.y,this,0));
+    for(let i=0;i<arms;i++)
+      this.tendrils.push(new Tendril(this.x,this.y,(i/arms)*6.28+Math.random()*.5,this,0));
+    // Root coral node
+    this.nodes.push({x:this.x,y:this.y,r:0,tr:20+Math.random()*8,hue:this.hue,lit:16,op:0,gr:.18});
   }
   update(){
-    this.age++; this.op=Math.min(.95,this.op+.007);
-    this.tendrils.forEach(t=>t.step_());
-    this.nodes.forEach(n=>n.update());
+    this.age++;this.op=Math.min(.95,this.op+.007);
+    // Advance tendrils
+    this.tendrils.forEach(t=>t.advance());
+    // Grow coral nodes
+    this.nodes.forEach(n=>{
+      n.op=Math.min(1,n.op+.04);
+      if(n.r<n.tr)n.r=Math.min(n.tr,n.r+n.gr);
+    });
     this.spt--;
     if(this.spt<=0&&this.nodes.length>1){
-      this.spt=40+Math.random()*45;
+      this.spt=40+Math.random()*40;
       const src=this.nodes[Math.floor(Math.random()*this.nodes.length)];
-      for(let i=0;i<3;i++) spores.push(new Spore(src.x,src.y));
+      for(let i=0;i<3;i++)spores.push(new Spore(src.x,src.y));
     }
   }
   draw(){
-    // Draw tendrils first (behind coral)
-    this.tendrils.forEach(t=>t.draw(this.op));
-    // Draw coral nodes large → small
-    [...this.nodes].sort((a,b)=>b.tr-a.tr).forEach(n=>n.draw(this.op));
+    // 1. Draw coral nodes FIRST (behind)
+    [...this.nodes].sort((a,b)=>b.tr-a.tr).forEach(n=>{
+      if(n.r<1||n.op<.01)return;
+      drawCluster(n.x,n.y,n.r*n.op,n.hue,n.lit,this.op*n.op);
+    });
+    // 2. Draw tendrils ON TOP — always visible
+    this.tendrils.forEach(t=>drawTendril(t.pts,t.hue,t.d,this.op));
   }
 }
 
@@ -259,41 +251,39 @@ class Colony {
 class Spore{
   constructor(x,y){
     this.x=x;this.y=y;
-    this.vx=(Math.random()-.5)*1.2;this.vy=-(Math.random()*.9+.1);
+    this.vx=(Math.random()-.5)*1.1;this.vy=-(Math.random()*.85+.08);
     this.life=1;this.dc=.003+Math.random()*.005;
-    this.r=.4+Math.random()*1.2;this.hue=248+Math.random()*42;
+    this.r=.4+Math.random()*1.1;this.hue=250+Math.random()*38;
   }
   update(){
-    this.x+=this.vx;this.y+=this.vy;this.vy+=.008;
-    this.life-=this.dc;
-    if(this.life<.2&&Math.random()<.003&&cols.length<14){
-      if(eAt(this.x,this.y)>.07||Math.random()<.1){
+    this.x+=this.vx;this.y+=this.vy;this.vy+=.008;this.life-=this.dc;
+    if(this.life<.2&&Math.random()<.003&&cols.length<13){
+      if(eAt(this.x,this.y)>.07||Math.random()<.09){
         cols.push(new Colony(this.x,this.y));this.life=0;
       }
     }
   }
   draw(){
-    X.save();X.globalAlpha=this.life*.3;
+    X.save();X.globalAlpha=this.life*.28;
     const g=X.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
-    g.addColorStop(0,`hsl(${this.hue},68%,68%)`);g.addColorStop(1,'transparent');
+    g.addColorStop(0,`hsl(${this.hue},65%,68%)`);g.addColorStop(1,'transparent');
     X.beginPath();X.arc(this.x,this.y,this.r*2,0,6.28);X.fillStyle=g;X.fill();X.restore();
   }
 }
 
-// ── Loop ──────────────────────────────────────────────────
+// ── Main loop ─────────────────────────────────────────────
 let cols=[],spores=[],running=false,at=0;
-
 function seed(){
   const n=2+Math.floor(Math.random()*2);
-  for(let i=0;i<n;i++) setTimeout(()=>{
+  for(let i=0;i<n;i++)setTimeout(()=>{
     cols.push(new Colony(C.width*(.15+Math.random()*.7),C.height*(.4+Math.random()*.45)));
   },i*1200+Math.random()*400);
 }
 function autoSeed(){
-  if(!eR||cols.length>=13)return;
+  if(!eR||cols.length>=12)return;
   for(let t=0;t<100;t++){
     const px=Math.random()*80,py=Math.random()*45;
-    if(EM[Math.round(py)*80+Math.round(px)]>.3){
+    if(EM[Math.round(py)*80+Math.round(px)]>.32){
       cols.push(new Colony(px/80*C.width,py/45*C.height));return;
     }
   }
@@ -303,8 +293,8 @@ function loop(){
   if(fN%14===0)updE();
   at++;if(at>130){at=0;autoSeed();}
   X.clearRect(0,0,C.width,C.height);
-  const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.06,C.width/2,C.height/2,C.height*.9);
-  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.32)');
+  const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.05,C.width/2,C.height/2,C.height*.9);
+  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.3)');
   X.fillStyle=vg;X.fillRect(0,0,C.width,C.height);
   cols.forEach(c=>{c.update();c.draw();});
   spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
@@ -312,13 +302,11 @@ function loop(){
   document.getElementById('info').textContent=cols.length+' col · '+tot+' nodos';
   requestAnimationFrame(loop);
 }
-
 document.getElementById('t').addEventListener('pointerdown',e=>{
   if(!running)return;
   cols.push(new Colony(e.clientX,e.clientY));
   for(let i=0;i<8;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*14,e.clientY));
 });
-
 document.getElementById('btn').addEventListener('click',async()=>{
   try{
     const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
