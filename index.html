@@ -10,119 +10,80 @@ body{background:#000;overflow:hidden;touch-action:none;}
 #v{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
 #c{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;}
 #t{position:fixed;inset:0;z-index:3;}
-#s{position:fixed;inset:0;z-index:20;background:#04000e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 1s;}
-#s h1{font-family:serif;font-size:15vw;color:#a855f7;letter-spacing:.1em;text-shadow:0 0 40px #7c3aed,0 0 80px #4c1d95;}
-#s p{color:#7c3aed77;font-size:11px;letter-spacing:.3em;font-family:monospace;}
-#s button{background:none;border:1px solid #7c3aed44;color:#e9d5ff;font-family:monospace;font-size:11px;letter-spacing:.2em;padding:14px 36px;cursor:pointer;}
-#hud{position:fixed;top:12px;left:14px;z-index:10;pointer-events:none;font-family:monospace;font-size:9px;color:#a855f744;letter-spacing:.1em;line-height:1.8;}
+#s{position:fixed;inset:0;z-index:20;background:#04000e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;transition:opacity 1s;}
+#s h1{font-family:serif;font-size:16vw;color:#a855f7;letter-spacing:.12em;text-shadow:0 0 50px #7c3aed,0 0 100px #4c1d95;}
+#s p{color:#7c3aed66;font-size:10px;letter-spacing:.35em;font-family:monospace;text-align:center;}
+#s button{background:none;border:1px solid #7c3aed55;color:#e9d5ff;font-family:monospace;font-size:11px;letter-spacing:.2em;padding:15px 40px;cursor:pointer;transition:.3s;}
+#s button:active{background:#7c3aed18;border-color:#a855f7;}
 </style>
-</div>
 </head>
 <body>
 <video id="v" autoplay playsinline muted></video>
 <canvas id="c"></canvas>
 <div id="t"></div>
-<div id="hud">FUNGI AR<br><span id="info"></span></div>
 <div id="s">
   <h1>FUNGI</h1>
   <p>AR · COLONIZACIÓN MICELIAL</p>
   <button id="btn">INICIAR INVASIÓN</button>
-  <p style="font-size:9px;opacity:.3">Toca para sembrar</p>
+  <p style="opacity:.35;margin-top:-8px;">toca la pantalla para sembrar</p>
 </div>
 <script>
 const C=document.getElementById('c'),X=C.getContext('2d');
 const V=document.getElementById('v');
-const SC=document.createElement('canvas');
-SC.width=80;SC.height=45;
-const SX=SC.getContext('2d',{willReadFrequently:true});
 function rsz(){C.width=innerWidth;C.height=innerHeight;}
 rsz();window.addEventListener('resize',rsz);
 
-// ── Edge map ──────────────────────────────────────────────
-let EM=new Float32Array(3600),eR=false,fN=0;
-function updE(){
-  if(V.readyState<2)return;
-  SX.drawImage(V,0,0,80,45);
-  const d=SX.getImageData(0,0,80,45).data;
-  const g=new Float32Array(3600);
-  for(let i=0;i<3600;i++)g[i]=(d[i*4]*.3+d[i*4+1]*.59+d[i*4+2]*.11)/255;
-  for(let y=1;y<44;y++)for(let x=1;x<79;x++){
-    const i=y*80+x;
-    const gx=-g[i-81]+g[i-79]-2*g[i-1]+2*g[i+1]-g[i+79]+g[i+81];
-    const gy=-g[i-81]-2*g[i-80]-g[i-79]+g[i+79]+2*g[i+80]+g[i+81];
-    EM[i]=EM[i]*.2+Math.min(1,Math.sqrt(gx*gx+gy*gy)*3.5)*.8;
-  }
-  eR=true;
-}
-function eAt(sx,sy){
-  if(!eR)return 0;
-  const px=Math.max(0,Math.min(79,Math.round(sx/C.width*80)));
-  const py=Math.max(0,Math.min(44,Math.round(sy/C.height*45)));
-  return EM[py*80+px];
-}
-// Find best edge nearby
-function snap(x,y,r){
-  let bv=0,bx=x,by=y;
-  for(let i=0;i<28;i++){
-    const a=i/28*6.28,d=r*(.05+Math.random()*.95);
-    const tx=x+Math.cos(a)*d,ty=y+Math.sin(a)*d;
-    const v=eAt(tx,ty);
-    if(v>bv){bv=v;bx=tx;by=ty;}
-  }
-  return bv>0.08?{x:bx,y:by}:{x,y};
-}
-
-// ── Draw coral cluster ────────────────────────────────────
-function drawCluster(cx,cy,radius,hue,baselit,alpha){
-  if(radius<1||alpha<.01)return;
-  const n=Math.max(2,Math.round(radius/4));
+// ── Coral cluster renderer ────────────────────────────────
+// Pre-compute random offsets per cluster to avoid per-frame randomness
+function drawCluster(cx,cy,r,hue,lit,alpha){
+  if(r<1||alpha<.01)return;
+  const n=Math.max(3,Math.round(r/4.5));
   X.save();
-  // Outer haze
-  X.globalAlpha=alpha*.09;
-  const gh=X.createRadialGradient(cx,cy,0,cx,cy,radius*2.2);
-  gh.addColorStop(0,`hsl(${hue},60%,${baselit}%)`);gh.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,radius*2.2,0,6.28);X.fillStyle=gh;X.fill();
-  // Lobes
+  // Soft outer glow
+  X.globalAlpha=alpha*.1;
+  const g0=X.createRadialGradient(cx,cy,0,cx,cy,r*2.4);
+  g0.addColorStop(0,`hsl(${hue},65%,${lit+5}%)`);g0.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,r*2.4,0,6.28);X.fillStyle=g0;X.fill();
+  // Irregular lobes
   for(let i=0;i<n;i++){
-    const la=(i/n)*6.28+(cx*.007+cy*.005);
-    const lr=radius*(.28+((i*7919)%100/100)*.42);
-    const lx=cx+Math.cos(la)*radius*.28,ly=cy+Math.sin(la)*radius*.28;
-    const ll=baselit+8+((i*31)%22);
-    X.globalAlpha=alpha*.72;
-    const g=X.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
-    g.addColorStop(0,`hsl(${hue-8},48%,${Math.min(86,ll+28)}%)`);
-    g.addColorStop(.4,`hsl(${hue},65%,${ll+8}%)`);
-    g.addColorStop(.8,`hsl(${hue+12},60%,${ll}%)`);
-    g.addColorStop(1,`hsl(${hue+22},50%,${Math.max(8,ll-18)}%)`);
+    const la=(i/n)*6.28+(cx*.008)+(cy*.005);
+    const lr=r*(.3+((i*7919+Math.round(cx*cy))%100)/100*.38);
+    const lx=cx+Math.cos(la)*r*.3,ly=cy+Math.sin(la)*r*.3;
+    const ll=lit+10+((i*37+Math.round(cx))%20);
+    X.globalAlpha=alpha*.75;
+    const g=X.createRadialGradient(lx-lr*.22,ly-lr*.28,0,lx,ly,lr);
+    g.addColorStop(0,`hsl(${hue-10},50%,${Math.min(86,ll+26)}%)`);
+    g.addColorStop(.45,`hsl(${hue},68%,${ll+8}%)`);
+    g.addColorStop(.82,`hsl(${hue+14},60%,${ll}%)`);
+    g.addColorStop(1,`hsl(${hue+24},50%,${Math.max(8,ll-20)}%)`);
     X.beginPath();
     for(let p=0;p<=8;p++){
-      const pa=(p/8)*6.28,pv=((p*17+i*31+Math.round(cx))%10)/10;
-      const pr=lr*(.76+pv*.44);
+      const pa=(p/8)*6.28;
+      const pr=lr*(.74+((p*19+i*31+Math.round(cx))%12)/12*.46);
       p===0?X.moveTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr):X.lineTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr);
     }
-    X.closePath();X.fillStyle=g;X.shadowBlur=lr*.8;X.shadowColor=`hsl(${hue},72%,${baselit+18}%)`;X.fill();
+    X.closePath();X.fillStyle=g;
+    X.shadowBlur=lr*.9;X.shadowColor=`hsl(${hue},78%,${lit+20}%)`;X.fill();
   }
-  // Center highlight
-  X.globalAlpha=alpha*.5;
-  const gc=X.createRadialGradient(cx-radius*.14,cy-radius*.18,0,cx,cy,radius*.55);
-  gc.addColorStop(0,`hsl(${hue-12},40%,${Math.min(88,baselit+40)}%)`);
-  gc.addColorStop(.5,`hsl(${hue},52%,${baselit+18}%)`);gc.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,radius*.55,0,6.28);X.fillStyle=gc;X.fill();
+  // Central bright cap
+  X.globalAlpha=alpha*.55;
+  const gc=X.createRadialGradient(cx-r*.15,cy-r*.2,0,cx,cy,r*.6);
+  gc.addColorStop(0,`hsl(${hue-14},42%,${Math.min(90,lit+42)}%)`);
+  gc.addColorStop(.5,`hsl(${hue},55%,${lit+20}%)`);gc.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,r*.6,0,6.28);X.fillStyle=gc;X.fill();
   X.restore();
 }
 
-// ── Draw one tendril path ─────────────────────────────────
-function drawTendril(pts,hue,depth,alpha){
+// ── Draw tendril segment ──────────────────────────────────
+function drawTendrilPath(pts,hue,thick,alpha){
   if(pts.length<2||alpha<.01)return;
-  const lit=38+depth*5;
-  const thick=Math.max(1.2,3.5-depth*.38);
+  const lit=42;
   X.save();
-  // Outer glow
-  X.globalAlpha=alpha*.6;
-  X.strokeStyle=`hsl(${hue},78%,${lit+10}%)`;
-  X.lineWidth=thick*2.5;
-  X.lineCap='round';X.lineJoin='round';
-  X.shadowBlur=thick*7;X.shadowColor=`hsl(${hue},92%,${lit+20}%)`;
+  // Thick glowing outer
+  X.globalAlpha=alpha*.55;
+  X.strokeStyle=`hsl(${hue},75%,${lit+8}%)`;
+  X.lineWidth=thick*2.2;X.lineCap='round';X.lineJoin='round';
+  X.shadowBlur=thick*6;X.shadowColor=`hsl(${hue},90%,${lit+22}%)`;
   X.beginPath();X.moveTo(pts[0].x,pts[0].y);
   for(let i=1;i<pts.length;i++){
     if(i<pts.length-1){
@@ -131,168 +92,174 @@ function drawTendril(pts,hue,depth,alpha){
     } else X.lineTo(pts[i].x,pts[i].y);
   }
   X.stroke();
-  // Bright inner
-  X.globalAlpha=alpha*.9;
-  X.strokeStyle=`hsl(${hue-5},55%,${Math.min(92,lit+32)}%)`;
-  X.lineWidth=thick*.6;X.shadowBlur=thick*2.5;X.stroke();
+  // Bright inner core
+  X.globalAlpha=alpha*.88;
+  X.strokeStyle=`hsl(${hue-6},52%,${Math.min(90,lit+34)}%)`;
+  X.lineWidth=thick*.55;X.shadowBlur=thick*2;X.stroke();
   X.restore();
 }
 
-// ── Tendril walker ────────────────────────────────────────
-class Tendril{
-  constructor(x,y,angle,col,depth){
-    this.x=x;this.y=y;this.a=angle;this.col=col;this.d=depth;
-    this.pts=[{x,y}];this.len=0;
-    this.maxLen=55+Math.random()*65-depth*7;
-    this.maxLen=Math.max(25,this.maxLen);
-    this.sz=2.5+Math.random()*2;
-    this.alive=true;this.spawnAt=16+Math.floor(Math.random()*16);
-    this.spawned=false;this.hue=col.hue+depth*4+(Math.random()-.5)*14;
-    this.wgl=0;
+// ── Node: a coral cluster that grows and branches ─────────
+class Node{
+  constructor(x,y,depth,hue,parentAngle){
+    this.x=x;this.y=y;this.d=depth;
+    this.hue=hue+(Math.random()-.5)*18;
+    this.lit=18+depth*8+Math.random()*10;
+    this.tr=(depth===0?22:depth===1?14:depth===2?9:depth===3?6:4)+Math.random()*5;
+    this.r=0;this.gr=.16+Math.random()*.2;
+    this.op=0;this.age=0;
+    // Tendril to parent stored as path points
+    this.tendrilPts=[];
+    this.tendrilLen=0;
+    this.tendrilMax=30+Math.random()*40-depth*4;
+    this.tendrilMax=Math.max(15,this.tendrilMax);
+    this.tendrilAngle=parentAngle;
+    this.tendrilDone=false;
+    this.tendrilThick=Math.max(1,3.2-depth*.38);
+    // Children
+    this.kids=[];
+    this.maxKids=depth<1?4:depth<3?3:depth<5?2:1;
+    this.kidCount=0;
+    this.kidTimer=20+Math.floor(Math.random()*25);
+    this.col=null; // set by colony
   }
-  advance(){
-    if(!this.alive)return;
-    if(this.len>=this.maxLen){this.alive=false;return;}
-    let bS=-1,bA=this.a;
-    for(let c=0;c<9;c++){
-      const sp=(c/8-.5)*.95,ta=this.a+sp;
-      const tx=this.x+Math.cos(ta)*this.sz*2,ty=this.y+Math.sin(ta)*this.sz*2;
-      if(tx<2||tx>C.width-2||ty<2||ty>C.height-2)continue;
-      const e=eAt(tx,ty);
-      const score=e*.72+Math.cos(sp)*.18+Math.random()*.1;
-      if(score>bS){bS=score;bA=ta;}
-    }
-    this.wgl+=(bA-this.a)*.42;this.wgl*=.68;
-    this.a+=this.wgl*.5+(Math.random()-.5)*.04;
-    this.x+=Math.cos(this.a)*this.sz;this.y+=Math.sin(this.a)*this.sz;
-    this.len+=this.sz;this.pts.push({x:this.x,y:this.y});
-    if(!this.spawned&&this.len>=this.spawnAt){
-      this.spawned=true;
-      if(this.d<5&&this.col.tendrils.length<this.col.maxT){
-        const n=this.d<2?(Math.random()<.6?2:1):1;
-        for(let i=0;i<n;i++){
-          const da=(Math.random()-.5)*(this.d<2?.85:1.1);
-          this.col.tendrils.push(new Tendril(this.x,this.y,this.a+da,this.col,this.d+1));
-        }
-      }
-      if(this.col.nodes.length<this.col.maxN){
-        this.col.nodes.push({x:this.x,y:this.y,r:0,
-          tr:(this.d===0?18:this.d===1?12:this.d===2?8:this.d===3?6:4)+Math.random()*5,
-          hue:this.hue,lit:18+this.d*8,op:0,gr:.16+Math.random()*.18});
+  update(){
+    this.age++;this.op=Math.min(1,this.op+.045);
+    if(this.r<this.tr)this.r=Math.min(this.tr,this.r+this.gr);
+    // Grow tendril path outward (simple organic curve, no edge detection)
+    if(!this.tendrilDone){
+      const steps=2;
+      for(let s=0;s<steps;s++){
+        if(this.tendrilLen>=this.tendrilMax){this.tendrilDone=true;break;}
+        // Gentle curve with slight random drift
+        this.tendrilAngle+=(Math.random()-.5)*.12;
+        const nx=this.x+Math.cos(this.tendrilAngle)*3;
+        const ny=this.y+Math.sin(this.tendrilAngle)*3;
+        this.tendrilPts.push({x:nx,y:ny});
+        this.x=nx;this.y=ny;
+        this.tendrilLen+=3;
       }
     }
-    if(this.x<1||this.x>C.width-1||this.y<1||this.y>C.height-1)this.alive=false;
+    // Spawn children
+    this.kidTimer--;
+    if(this.kidTimer<=0&&this.kidCount<this.maxKids&&this.tendrilDone&&this.d<6){
+      this.kidTimer=18+Math.floor(Math.random()*22);
+      this.spawnKid();
+    }
+  }
+  spawnKid(){
+    if(!this.col||this.col.nodes.length>=this.col.maxN)return;
+    this.kidCount++;
+    const spread=this.d<2?.9:1.2;
+    const angle=this.tendrilAngle+(Math.random()-.5)*spread*2;
+    const kid=new Node(this.x,this.y,this.d+1,this.hue,angle);
+    kid.col=this.col;
+    this.kids.push(kid);
+    this.col.nodes.push(kid);
+  }
+  draw(colOp){
+    const a=colOp*this.op;
+    // Draw tendril path
+    if(this.tendrilPts.length>1)
+      drawTendrilPath(this.tendrilPts,this.hue,this.tendrilThick,a);
+    // Draw coral cluster at current tip
+    drawCluster(this.x,this.y,this.r*this.op,this.hue,this.lit,a);
   }
 }
 
 // ── Colony ────────────────────────────────────────────────
 class Colony{
   constructor(x,y){
-    const s=snap(x,y,85);
-    this.x=s.x;this.y=s.y;this.op=0;this.age=0;
-    this.hue=248+Math.random()*38;
-    this.tendrils=[];this.nodes=[];
-    this.maxT=35+Math.floor(Math.random()*25);
-    this.maxN=22+Math.floor(Math.random()*18);
-    this.spt=50+Math.random()*45;
-    const arms=3+Math.floor(Math.random()*3); // more arms = denser from start
-    for(let i=0;i<arms;i++)
-      this.tendrils.push(new Tendril(this.x,this.y,(i/arms)*6.28+Math.random()*.4,this,0));
-    this.nodes.push({x:this.x,y:this.y,r:0,tr:20+Math.random()*10,hue:this.hue,lit:16,op:0,gr:.18});
+    this.x=x;this.y=y;this.op=0;this.age=0;
+    this.hue=250+Math.random()*35;
+    this.nodes=[];this.maxN=25+Math.floor(Math.random()*20);
+    this.spt=50+Math.random()*40;
+    // Seed root node + initial arms
+    const arms=3+Math.floor(Math.random()*3);
+    for(let i=0;i<arms;i++){
+      const a=(i/arms)*6.28+Math.random()*.5;
+      const root=new Node(x,y,0,this.hue,a);
+      root.col=this;
+      this.nodes.push(root);
+    }
+    // Root coral cluster
+    this.rootR=0;this.rootTr=18+Math.random()*10;
   }
   update(){
-    this.age++;this.op=Math.min(.95,this.op+.008);
-    this.tendrils.forEach(t=>t.advance());
-    this.nodes.forEach(n=>{n.op=Math.min(1,n.op+.04);if(n.r<n.tr)n.r=Math.min(n.tr,n.r+n.gr);});
+    this.age++;this.op=Math.min(.95,this.op+.009);
+    this.rootR=Math.min(this.rootTr,this.rootR+.2);
+    this.nodes.forEach(n=>n.update());
     this.spt--;
     if(this.spt<=0&&this.nodes.length>1){
-      this.spt=38+Math.random()*38;
+      this.spt=35+Math.random()*35;
       const src=this.nodes[Math.floor(Math.random()*this.nodes.length)];
       for(let i=0;i<3;i++)spores.push(new Spore(src.x,src.y));
     }
   }
   draw(){
-    // Clusters behind
-    [...this.nodes].sort((a,b)=>b.tr-a.tr).forEach(n=>{
-      if(n.r<1||n.op<.01)return;
-      drawCluster(n.x,n.y,n.r*n.op,n.hue,n.lit,this.op*n.op);
-    });
-    // Tendrils on top
-    this.tendrils.forEach(t=>drawTendril(t.pts,t.hue,t.d,this.op));
+    // Root cluster
+    drawCluster(this.x,this.y,this.rootR*this.op,this.hue,16,this.op);
+    // All nodes (clusters drawn on top of tendrils per node)
+    this.nodes.forEach(n=>n.draw(this.op));
   }
 }
 
+// ── Floating spore ────────────────────────────────────────
 class Spore{
   constructor(x,y){
-    this.x=x;this.y=y;this.vx=(Math.random()-.5)*1.1;this.vy=-(Math.random()*.8+.08);
-    this.life=1;this.dc=.003+Math.random()*.005;this.r=.4+Math.random()*1.1;this.hue=250+Math.random()*38;
+    this.x=x;this.y=y;
+    this.vx=(Math.random()-.5)*1.2;this.vy=-(Math.random()*.9+.1);
+    this.life=1;this.dc=.004+Math.random()*.005;
+    this.r=.5+Math.random()*1.2;this.hue=250+Math.random()*35;
   }
   update(){
-    this.x+=this.vx;this.y+=this.vy;this.vy+=.008;this.life-=this.dc;
-    if(this.life<.2&&Math.random()<.004&&cols.length<18){
-      if(eAt(this.x,this.y)>.06||Math.random()<.12){cols.push(new Colony(this.x,this.y));this.life=0;}
+    this.x+=this.vx;this.y+=this.vy;this.vy+=.009;this.life-=this.dc;
+    if(this.life<.18&&Math.random()<.004&&cols.length<16){
+      cols.push(new Colony(this.x,this.y));this.life=0;
     }
   }
   draw(){
-    X.save();X.globalAlpha=this.life*.28;
-    const g=X.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
-    g.addColorStop(0,`hsl(${this.hue},65%,68%)`);g.addColorStop(1,'transparent');
-    X.beginPath();X.arc(this.x,this.y,this.r*2,0,6.28);X.fillStyle=g;X.fill();X.restore();
+    X.save();X.globalAlpha=this.life*.3;
+    const g=X.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2.2);
+    g.addColorStop(0,`hsl(${this.hue},68%,70%)`);g.addColorStop(1,'transparent');
+    X.beginPath();X.arc(this.x,this.y,this.r*2.2,0,6.28);X.fillStyle=g;X.fill();X.restore();
   }
 }
 
-let cols=[],spores=[],running=false,at=0;
+// ── Main ──────────────────────────────────────────────────
+let cols=[],spores=[],running=false,fN=0,autoT=0;
 
-// Seed aggressively across the whole screen from the start
 function seed(){
-  // 6 colonies spread across screen immediately
-  const positions=[
-    [.15,.45],[.5,.38],[.82,.42],
-    [.28,.72],[.65,.68],[.45,.55]
-  ];
-  positions.forEach((p,i)=>setTimeout(()=>{
-    cols.push(new Colony(C.width*p[0],C.height*p[1]));
-  },i*400+Math.random()*200));
-}
-
-function autoSeed(){
-  if(cols.length>=18)return;
-  // Try edge first, fallback to random
-  if(eR){
-    for(let t=0;t<80;t++){
-      const px=Math.random()*80,py=Math.random()*45;
-      if(EM[Math.round(py)*80+Math.round(px)]>.25){
-        cols.push(new Colony(px/80*C.width,py/45*C.height));return;
-      }
-    }
-  }
-  // Fallback: random position
-  if(cols.length<8)
-    cols.push(new Colony(C.width*(.1+Math.random()*.8),C.height*(.35+Math.random()*.5)));
+  // 5 colonies spread across screen
+  [[.15,.5],[.5,.4],[.82,.48],[.3,.72],[.68,.65]].forEach((p,i)=>{
+    setTimeout(()=>cols.push(new Colony(C.width*p[0],C.height*p[1])),i*500+100);
+  });
 }
 
 function loop(){
-  fN++;if(fN%12===0)updE();
-  at++;if(at>80){at=0;autoSeed();}
+  fN++;
+  autoT++;if(autoT>100&&cols.length<16){autoT=0;cols.push(new Colony(C.width*(.1+Math.random()*.8),C.height*(.35+Math.random()*.5)));}
   X.clearRect(0,0,C.width,C.height);
+  // Subtle vignette
   const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.05,C.width/2,C.height/2,C.height*.9);
-  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.28)');
+  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.25)');
   X.fillStyle=vg;X.fillRect(0,0,C.width,C.height);
   cols.forEach(c=>{c.update();c.draw();});
   spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
-  document.getElementById('info').textContent=cols.length+' col · '+cols.reduce((a,c)=>a+c.nodes.length,0)+' nodos';
   requestAnimationFrame(loop);
 }
 
 document.getElementById('t').addEventListener('pointerdown',e=>{
   if(!running)return;
   cols.push(new Colony(e.clientX,e.clientY));
-  for(let i=0;i<10;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*14,e.clientY));
+  for(let i=0;i<8;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*15,e.clientY));
 });
 
 document.getElementById('btn').addEventListener('click',async()=>{
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const s=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false
+    });
     V.srcObject=s;await V.play();
   }catch(e){}
   const el=document.getElementById('s');
