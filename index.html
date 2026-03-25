@@ -13,22 +13,22 @@
   #touch{position:fixed;inset:0;z-index:3;}
   #ecv,#scv{position:fixed;display:none;}
   #hud{position:fixed;top:0;left:0;right:0;z-index:10;pointer-events:none;padding:14px 16px;display:flex;justify-content:space-between;}
-  .ht{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,5vw,28px);letter-spacing:.2em;color:#b084e8;text-shadow:0 0 16px #7c3aed55;line-height:1;}
-  .hs{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed33;letter-spacing:.18em;margin-top:2px;}
-  .hr{font-family:'Space Mono',monospace;font-size:8px;color:#a855f733;letter-spacing:.07em;line-height:1.9;text-align:right;}
+  .ht{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,5vw,28px);letter-spacing:.2em;color:#b084e8;text-shadow:0 0 14px #7c3aed44;line-height:1;}
+  .hs{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed30;letter-spacing:.18em;margin-top:2px;}
+  .hr{font-family:'Space Mono',monospace;font-size:8px;color:#a855f730;letter-spacing:.07em;line-height:1.9;text-align:right;}
   #bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;display:flex;align-items:center;gap:8px;}
-  .bl{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed44;letter-spacing:.14em;white-space:nowrap;}
-  .bt{width:80px;height:1px;background:#7c3aed15;}
+  .bl{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed40;letter-spacing:.14em;white-space:nowrap;}
+  .bt{width:80px;height:1px;background:#7c3aed12;}
   .bf{height:100%;background:linear-gradient(90deg,#2e1065,#a855f7);box-shadow:0 0 4px #7c3aed;width:0%;transition:width .5s;}
-  .bp{font-family:'Space Mono',monospace;font-size:7px;color:#a855f744;width:24px;}
-  #start{position:fixed;inset:0;z-index:20;background:radial-gradient(ellipse at 50% 60%,#080112 0%,#010004 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity 1.4s;}
+  .bp{font-family:'Space Mono',monospace;font-size:7px;color:#a855f740;width:24px;}
+  #start{position:fixed;inset:0;z-index:20;background:radial-gradient(ellipse at 50% 60%,#08011a 0%,#010004 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity 1.4s;}
   #bgc{position:absolute;inset:0;pointer-events:none;}
   .si{position:relative;z-index:2;text-align:center;padding:32px;}
   .si h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(68px,18vw,110px);color:#a855f7;letter-spacing:.14em;line-height:.85;text-shadow:0 0 50px #7c3aed77,0 0 100px #4c1d9533;animation:gl 3.5s ease-in-out infinite;}
   @keyframes gl{0%,100%{text-shadow:0 0 50px #7c3aed77,0 0 100px #4c1d9533;}50%{text-shadow:0 0 80px #a855f7aa,0 0 140px #7c3aed55;}}
   .si .sub{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.35em;color:#7c3aed33;margin:5px 0 40px;}
-  .btn{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:#e9d5ff;background:transparent;border:1px solid #7c3aed2a;padding:15px 38px;cursor:pointer;transition:all .3s;}
-  .btn:hover,.btn:active{border-color:#a855f7;box-shadow:0 0 18px #7c3aed22;background:#7c3aed0a;}
+  .btn{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:#e9d5ff;background:transparent;border:1px solid #7c3aed28;padding:15px 38px;cursor:pointer;transition:all .3s;}
+  .btn:hover,.btn:active{border-color:#a855f7;background:#7c3aed0a;}
   .hint{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed22;letter-spacing:.2em;margin-top:16px;}
 </style>
 </head>
@@ -60,22 +60,107 @@
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const video=document.getElementById('video');
 const ecv=document.getElementById('ecv'),scv=document.getElementById('scv');
-const ectx=ecv.getContext('2d',{willReadFrequently:true});
 const sctx=scv.getContext('2d',{willReadFrequently:true});
-const PW=160,PH=90;
+const PW=120,PH=68; // smaller = faster edge detection
 ecv.width=PW;ecv.height=PH;scv.width=PW;scv.height=PH;
 function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
 resize();window.addEventListener('resize',resize);
 
-// ── Noise ─────────────────────────────────────────────────
-function h(n){return Math.sin(n*127.1+311.7)*43758.5453%1;}
-function noise(x,y){
-  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;
-  const ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy);
-  const a=h(ix+iy*57),b=h(ix+1+iy*57),c=h(ix+(iy+1)*57),d=h(ix+1+(iy+1)*57);
-  return a+(b-a)*ux+((c-a)+(a-b+d-c)*ux)*uy;
+// ── Pre-render coral stamp library ────────────────────────
+// We create a set of offscreen canvases with organic coral shapes
+// then just drawImage() them at runtime — very fast
+const STAMP_COUNT = 24;
+const STAMP_SIZES = [8,12,16,22,30,40]; // px radii
+const stamps = []; // stamps[sizeIdx][stampIdx] = {canvas, hue, lit}
+
+// Build one stamp: organic multi-lobe shape on offscreen canvas
+function buildStamp(radius, hue, lit){
+  const sz = radius*3;
+  const oc = document.createElement('canvas');
+  oc.width=sz; oc.height=sz;
+  const ox=oc.getContext('2d');
+  const cx=sz/2, cy=sz/2;
+
+  // Outer glow
+  const gGlow=ox.createRadialGradient(cx,cy,0,cx,cy,sz/2);
+  gGlow.addColorStop(0,`hsla(${hue},70%,${lit+5}%,0.15)`);
+  gGlow.addColorStop(1,'transparent');
+  ox.beginPath();ox.arc(cx,cy,sz/2,0,Math.PI*2);
+  ox.fillStyle=gGlow;ox.fill();
+
+  // 3–5 irregular lobes
+  const lobes=3+Math.floor(Math.random()*3);
+  for(let l=0;l<lobes;l++){
+    const la=(l/lobes)*Math.PI*2+Math.random()*.5;
+    const lr=radius*(0.4+Math.random()*.35);
+    const lx=cx+Math.cos(la)*radius*.32;
+    const ly=cy+Math.sin(la)*radius*.32;
+    const lobeLit=lit+8+Math.random()*18;
+    const g=ox.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr*1.1);
+    g.addColorStop(0,`hsl(${hue-10},52%,${Math.min(88,lobeLit+28)}%)`);
+    g.addColorStop(0.4,`hsl(${hue},62%,${lobeLit+8}%)`);
+    g.addColorStop(0.8,`hsl(${hue+12},58%,${Math.max(12,lobeLit-8)}%)`);
+    g.addColorStop(1,`hsl(${hue+20},48%,${Math.max(5,lobeLit-22)}%)`);
+
+    // Irregular lobe path (pre-computed polygon)
+    ox.beginPath();
+    const pts=10;
+    const rands=Array.from({length:pts},()=>0.75+Math.random()*.5);
+    for(let p=0;p<=pts;p++){
+      const pa=(p/pts)*Math.PI*2;
+      const r2=lr*rands[p%pts];
+      ox.lineTo(lx+Math.cos(pa)*r2, ly+Math.sin(pa)*r2);
+    }
+    ox.closePath();
+    ox.fillStyle=g;
+    ox.shadowBlur=lr*.7;ox.shadowColor=`hsl(${hue},75%,${lit+18}%)`;
+    ox.fill();
+  }
+
+  // Central cap highlight
+  const cg=ox.createRadialGradient(cx-radius*.12,cy-radius*.18,0,cx,cy,radius*.65);
+  cg.addColorStop(0,`hsla(${hue-15},40%,${Math.min(90,lit+42)}%,0.7)`);
+  cg.addColorStop(.5,`hsla(${hue},55%,${lit+18}%,0.5)`);
+  cg.addColorStop(1,'transparent');
+  ox.beginPath();ox.arc(cx,cy,radius*.65,0,Math.PI*2);
+  ox.fillStyle=cg;ox.fill();
+
+  return oc;
 }
-function fbm(x,y){return noise(x,y)*.5+noise(x*2,y*2)*.25+noise(x*4,y*4)*.125;}
+
+// Pre-build stamp library for different hue/lit combos and sizes
+// Hue bands: deep blue-violet (245) → violet (270) → lila (290)
+const HUE_BANDS = [
+  {hue:245, lit:15}, // dark base
+  {hue:258, lit:22},
+  {hue:268, lit:30},
+  {hue:275, lit:40},
+  {hue:280, lit:52},
+  {hue:285, lit:62}, // bright tip
+];
+
+const stampLib = {}; // key: `${sizeIdx}_${hueIdx}` → array of canvases
+function buildLibrary(){
+  HUE_BANDS.forEach((band,hi)=>{
+    STAMP_SIZES.forEach((r,si)=>{
+      const key=`${si}_${hi}`;
+      stampLib[key]=[];
+      for(let v=0;v<4;v++){ // 4 variants per combo
+        stampLib[key].push(buildStamp(r, band.hue+Math.random()*10-5, band.lit+Math.random()*8-4));
+      }
+    });
+  });
+}
+buildLibrary();
+
+function getStamp(radius, depthFrac){
+  // depthFrac: 0=base, 1=tip
+  const si=Math.min(STAMP_SIZES.length-1, Math.round(radius/7));
+  const hi=Math.min(HUE_BANDS.length-1, Math.round(depthFrac*(HUE_BANDS.length-1)));
+  const key=`${si}_${hi}`;
+  const arr=stampLib[key];
+  return arr[Math.floor(Math.random()*arr.length)];
+}
 
 // ── Edge map ──────────────────────────────────────────────
 let edgeMap=new Float32Array(PW*PH),edgeReady=false,frameN=0;
@@ -103,8 +188,8 @@ function eAt(sx,sy){
 }
 function nearEdge(sx,sy,r=100){
   let bv=0,bx=sx,by=sy;
-  for(let i=0;i<48;i++){
-    const a=i/48*Math.PI*2,d=r*(.05+Math.random()*.95);
+  for(let i=0;i<36;i++){
+    const a=i/36*Math.PI*2,d=r*(.05+Math.random()*.95);
     const tx=sx+Math.cos(a)*d,ty=sy+Math.sin(a)*d;
     const v=eAt(tx,ty);
     if(v>bv){bv=v;bx=tx;by=ty;}
@@ -112,165 +197,85 @@ function nearEdge(sx,sy,r=100){
   return{x:bx,y:by,e:bv};
 }
 
-// ── Draw a single coral bract (little cauliflower bump) ───
-// Uses stacked irregular lobes — the fundamental texture unit
-function drawBract(x,y,r,hue,lit,alpha,seed,t){
-  if(r<1.5||alpha<0.01)return;
-  ctx.save();
-  ctx.globalAlpha=alpha;
-
-  // Each bract = 5–9 overlapping lobe shapes arranged in a cluster
-  const lobes=4+Math.floor(r/4);
-  for(let i=0;i<lobes;i++){
-    const la=(i/lobes)*Math.PI*2+seed*.8;
-    const lr=r*(0.35+noise(seed+i*.7,t*.002)*.45);
-    const lx=x+Math.cos(la)*r*0.28;
-    const ly=y+Math.sin(la)*r*0.28;
-
-    // lobe lightness: outer lobes a bit lighter (they catch light)
-    const lobeLit=lit+12+Math.sin(la+seed)*8;
-
-    ctx.save();
-    ctx.globalAlpha=alpha*0.8;
-    const g=ctx.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
-    g.addColorStop(0,`hsl(${hue-8},${55+i*2}%,${Math.min(90,lobeLit+22)}%)`);
-    g.addColorStop(0.4,`hsl(${hue},${60+i}%,${lobeLit+8}%)`);
-    g.addColorStop(0.85,`hsl(${hue+12},58%,${Math.max(10,lobeLit-10)}%)`);
-    g.addColorStop(1,`hsl(${hue+20},50%,${Math.max(5,lobeLit-20)}%)`);
-    ctx.beginPath();
-
-    // Slightly warped circle for each lobe
-    const pts=12;
-    for(let p=0;p<=pts;p++){
-      const pa=(p/pts)*Math.PI*2;
-      const warp=1+fbm(lx*.03+Math.cos(pa)*1.2+seed*.1,ly*.03+Math.sin(pa)*1.2)*0.35;
-      const px2=lx+Math.cos(pa)*lr*warp;
-      const py2=ly+Math.sin(pa)*lr*warp;
-      p===0?ctx.moveTo(px2,py2):ctx.lineTo(px2,py2);
-    }
-    ctx.closePath();
-    ctx.fillStyle=g;
-    ctx.shadowBlur=lr*.8;
-    ctx.shadowColor=`hsl(${hue},75%,${lit+15}%)`;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // Central cap — slightly lighter, gives mushroom cap feel
-  ctx.save();
-  ctx.globalAlpha=alpha*0.65;
-  const cg=ctx.createRadialGradient(x-r*.15,y-r*.2,0,x,y,r*.7);
-  cg.addColorStop(0,`hsl(${hue-15},45%,${Math.min(92,lit+38)}%)`);
-  cg.addColorStop(.5,`hsl(${hue},58%,${lit+15}%)`);
-  cg.addColorStop(1,'transparent');
-  ctx.beginPath();ctx.arc(x,y,r*.7,0,Math.PI*2);
-  ctx.fillStyle=cg;ctx.fill();
-  ctx.restore();
-  ctx.restore();
-}
-
-// ── Tendril between nodes ─────────────────────────────────
-function drawTendril(x1,y1,x2,y2,hue,lit,alpha,thick,t){
-  if(alpha<0.02)return;
-  ctx.save();
-  ctx.globalAlpha=alpha*0.65;
-  // wavy tendril using noise offset
-  const steps=12;
-  const dx=x2-x1,dy=y2-y1;
-  const len=Math.sqrt(dx*dx+dy*dy);
-  if(len<2){ctx.restore();return;}
-  const nx=-dy/len,ny=dx/len; // normal
-  ctx.beginPath();
-  for(let i=0;i<=steps;i++){
-    const s=i/steps;
-    const bx=x1+dx*s,by=y1+dy*s;
-    const wamp=Math.sin(s*Math.PI)*thick*2.5;
-    const wfreq=t*.015+s*3.5;
-    const wo=Math.sin(wfreq)*wamp;
-    const px=bx+nx*wo,py=by+ny*wo;
-    i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
-  }
-  ctx.strokeStyle=`hsl(${hue},62%,${lit+8}%)`;
-  ctx.lineWidth=thick;ctx.lineCap='round';ctx.lineJoin='round';
-  ctx.shadowBlur=thick*4;ctx.shadowColor=`hsl(${hue},75%,${lit+15}%)`;
-  ctx.stroke();
-  ctx.restore();
-}
-
-// ── Colony node ───────────────────────────────────────────
+// ── Node ──────────────────────────────────────────────────
 class Node{
   constructor(x,y,col,depth){
     this.x=x;this.y=y;this.col=col;this.depth=depth;
+    this.maxDepth=col.maxDepth;
     this.r=0;
-    // Radius based on depth: root is large, tips are small
-    this.targetR=depth===0?20+Math.random()*15:
-                 depth===1?12+Math.random()*10:
-                 depth===2?7+Math.random()*7:
-                 4+Math.random()*5;
+    const base=depth===0?18:depth===1?12:depth===2?8:depth===3?5:3.5;
+    this.targetR=base+Math.random()*base*.7;
     this.targetR=Math.max(3,this.targetR);
-    this.growSpeed=0.12+Math.random()*0.18;
-    // Color: dark blue-violet at base → violet → lila → white at tips
-    this.hue=col.hue+depth*8+(Math.random()-.5)*12;
-    // deeper depth = lighter lit (tips are whitish)
-    this.lit=15+depth*9+Math.random()*12;
-    this.lit=Math.min(72,this.lit);
-    this.seed=Math.random()*500;
+    this.growSpeed=0.2+Math.random()*0.25;
+    this.depthFrac=depth/this.maxDepth;
+    this.stamp=getStamp(this.targetR, this.depthFrac);
     this.age=0;
     this.opacity=0;
-    this.childTimer=25+Math.floor(Math.random()*35);
+    this.childTimer=18+Math.floor(Math.random()*28);
     this.maxCh=depth<1?4:depth<3?3:depth<5?2:1;
-    this.chSpawned=0;
+    this.chCount=0;
     this.spawnDir=Math.random()*Math.PI*2;
     this.grown=false;
-    this.tendrils=[]; // connections to children
+    // tendrils as simple line data (no objects)
+    this.childData=[]; // {x1,y1,x2,y2,t,hueIdx}
   }
-  update(t){
+  update(){
     this.age++;
-    this.opacity=Math.min(1,this.opacity+0.04);
+    this.opacity=Math.min(1,this.opacity+0.05);
     if(!this.grown){
       this.r=Math.min(this.targetR,this.r+this.growSpeed);
       if(this.r>=this.targetR)this.grown=true;
     }
+    this.childData.forEach(c=>{c.t=Math.min(1,c.t+.04);});
     this.childTimer--;
-    if(this.childTimer<=0&&this.chSpawned<this.maxCh&&this.col.nodes.length<this.col.maxNodes&&this.r>this.targetR*.55){
-      this.childTimer=20+Math.floor(Math.random()*30);
-      this.spawnChild();
+    if(this.childTimer<=0&&this.chCount<this.maxCh&&this.col.nodes.length<this.col.maxNodes&&this.r>this.targetR*.5){
+      this.childTimer=16+Math.floor(Math.random()*25);
+      this.trySpawn();
     }
   }
-  spawnChild(){
-    this.chSpawned++;
-    let bScore=-1,bx=this.x,by=this.y,ba=this.spawnDir;
-    const spread=this.depth<2?0.9:1.2;
-    for(let t2=0;t2<24;t2++){
+  trySpawn(){
+    this.chCount++;
+    let bS=-1,bx=this.x,by=this.y,ba=this.spawnDir;
+    const spread=this.depth<2?.85:1.1;
+    for(let t=0;t<20;t++){
       const a=this.spawnDir+(Math.random()-.5)*spread*2;
-      // distance: pack tightly so bracts overlap and feel dense
-      const dist=this.r*.6+this.targetR*.4+Math.random()*this.targetR*.5;
+      const dist=this.r*.65+this.targetR*.4+Math.random()*this.targetR*.5;
       const tx=this.x+Math.cos(a)*dist,ty=this.y+Math.sin(a)*dist;
       if(tx<2||tx>canvas.width-2||ty<2||ty>canvas.height-2)continue;
       const e=eAt(tx,ty);
-      const score=e*.7+Math.random()*.3;
-      if(score>bScore){bScore=score;bx=tx;by=ty;ba=a;}
+      const sc=e*.68+Math.random()*.32;
+      if(sc>bS){bS=sc;bx=tx;by=ty;ba=a;}
     }
-    this.spawnDir=ba+(Math.random()-.5)*.7;
+    this.spawnDir=ba+(Math.random()-.5)*.6;
     const child=new Node(bx,by,this.col,this.depth+1);
-    child.hue=this.hue+(Math.random()-.5)*10;
-    child.lit=Math.min(72,this.lit+6+Math.random()*8);
     this.col.nodes.push(child);
-    this.tendrils.push({
-      node:child,
-      t:0,
-      hue:this.hue,
-      lit:this.lit+10,
-      thick:Math.max(0.4,1.6-this.depth*.25)
-    });
+    this.childData.push({x2:bx,y2:by,t:0,hi:Math.min(HUE_BANDS.length-1,this.depth+1)});
   }
-  draw(t){
-    // Draw tendrils first (behind bracts)
-    this.tendrils.forEach(tn=>{
-      tn.t=Math.min(1,tn.t+.03);
-      drawTendril(this.x,this.y,tn.node.x,tn.node.y,tn.hue,tn.lit,this.col.opacity*this.opacity*tn.t,tn.thick,t);
+  draw(){
+    // Draw tendrils (thin lines — very cheap)
+    this.childData.forEach(c=>{
+      if(c.t<.02)return;
+      const band=HUE_BANDS[c.hi];
+      ctx.save();
+      ctx.globalAlpha=this.col.opacity*this.opacity*c.t*.55;
+      ctx.strokeStyle=`hsl(${band.hue},60%,${band.lit+15}%)`;
+      ctx.lineWidth=Math.max(.4,1.5-this.depth*.2);
+      ctx.lineCap='round';
+      ctx.shadowBlur=3;ctx.shadowColor=`hsl(${band.hue},75%,${band.lit+20}%)`;
+      // draw partial line up to t
+      const ex=this.x+(c.x2-this.x)*c.t, ey=this.y+(c.y2-this.y)*c.t;
+      ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.restore();
     });
-    drawBract(this.x,this.y,this.r*this.opacity,this.hue,this.lit,this.col.opacity*this.opacity,this.seed,t);
+
+    // Draw stamp (pre-rendered coral shape — just drawImage, very fast)
+    if(this.r<1||!this.stamp)return;
+    const sc=this.r*2/this.stamp.width*3; // scale to current radius
+    const sw=this.stamp.width*sc, sh=this.stamp.height*sc;
+    ctx.save();
+    ctx.globalAlpha=this.col.opacity*this.opacity;
+    ctx.drawImage(this.stamp, this.x-sw/2, this.y-sh/2, sw, sh);
+    ctx.restore();
   }
 }
 
@@ -280,32 +285,30 @@ class Colony{
     const anch=nearEdge(x,y,110);
     this.x=anch.e>0.1?anch.x:x;
     this.y=anch.e>0.1?anch.y:y;
-    // Palette: deep blue-violet like the reference
-    this.hue=245+Math.random()*40; // 245–285: blue-violet range
     this.opacity=0;
     this.nodes=[];
     this.age=0;
-    this.maxNodes=40+Math.floor(Math.random()*40);
-    this.sporeTimer=70+Math.random()*80;
-    const root=new Node(this.x,this.y,this,0);
-    this.nodes.push(root);
+    this.maxNodes=30+Math.floor(Math.random()*35);
+    this.maxDepth=6;
+    this.sporeTimer=60+Math.random()*70;
+    this.nodes.push(new Node(this.x,this.y,this,0));
   }
-  update(t){
+  update(){
     this.age++;
-    this.opacity=Math.min(0.96,this.opacity+0.007);
-    this.nodes.forEach(n=>n.update(t));
+    this.opacity=Math.min(0.96,this.opacity+0.008);
+    this.nodes.forEach(n=>n.update());
     this.sporeTimer--;
     if(this.sporeTimer<=0&&this.nodes.length>3){
-      this.sporeTimer=50+Math.random()*60;
+      this.sporeTimer=45+Math.random()*55;
       const src=this.nodes[Math.floor(Math.random()*this.nodes.length)];
       for(let i=0;i<2+Math.floor(Math.random()*3);i++)spores.push(new Spore(src.x,src.y));
       if(Math.random()<.15)clouds.push(new Cloud(src.x,src.y));
     }
   }
-  draw(t){
-    // Draw large nodes first (painter's algorithm — depth sorting)
+  draw(){
+    // depth sort: large (deep) nodes first
     const sorted=[...this.nodes].sort((a,b)=>b.targetR-a.targetR);
-    sorted.forEach(n=>n.draw(t));
+    sorted.forEach(n=>n.draw());
   }
   get brotes(){return this.nodes.length;}
 }
@@ -314,47 +317,47 @@ class Colony{
 class Spore{
   constructor(x,y){
     this.x=x;this.y=y;
-    this.vx=(Math.random()-.5)*1.5;this.vy=-(0.08+Math.random()*1.4);
-    this.life=1;this.decay=.0025+Math.random()*.005;
-    this.r=.4+Math.random()*1.5;this.hue=245+Math.random()*50;this.landed=false;
+    this.vx=(Math.random()-.5)*1.4;this.vy=-(0.05+Math.random()*1.2);
+    this.life=1;this.decay=.003+Math.random()*.005;
+    this.r=.4+Math.random()*1.4;this.hue=248+Math.random()*45;this.landed=false;
   }
   update(){
     this.x+=this.vx;this.y+=this.vy;
-    this.vy+=.009;this.vx+=(Math.random()-.5)*.025;
+    this.vy+=.009;this.vx+=(Math.random()-.5)*.02;
     this.life-=this.decay;
-    if(!this.landed&&this.life<.2&&Math.random()<.003&&colonies.length<20){
-      if(eAt(this.x,this.y)>0.07||Math.random()<.15){
+    if(!this.landed&&this.life<.2&&Math.random()<.003&&colonies.length<18){
+      if(eAt(this.x,this.y)>0.07||Math.random()<.12){
         colonies.push(new Colony(this.x,this.y));this.landed=true;
       }
     }
   }
   draw(){
-    ctx.save();ctx.globalAlpha=this.life*.45;
+    ctx.save();ctx.globalAlpha=this.life*.4;
     const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
-    g.addColorStop(0,`hsl(${this.hue},72%,78%)`);g.addColorStop(1,'transparent');
+    g.addColorStop(0,`hsl(${this.hue},68%,72%)`);g.addColorStop(1,'transparent');
     ctx.beginPath();ctx.arc(this.x,this.y,this.r*2,0,Math.PI*2);
     ctx.fillStyle=g;ctx.fill();ctx.restore();
   }
 }
 class Cloud{
   constructor(x,y){
-    this.x=x+(Math.random()-.5)*35;this.y=y;
-    this.r=6+Math.random()*35;
-    this.vx=(Math.random()-.5)*.18;this.vy=-(0.03+Math.random()*.2);
-    this.life=.28+Math.random()*.38;this.decay=.0007+Math.random()*.0015;
-    this.hue=245+Math.random()*40;
+    this.x=x+(Math.random()-.5)*30;this.y=y;
+    this.r=5+Math.random()*30;
+    this.vx=(Math.random()-.5)*.15;this.vy=-(0.03+Math.random()*.18);
+    this.life=.25+Math.random()*.35;this.decay=.0006+Math.random()*.0013;
+    this.hue=248+Math.random()*38;
   }
-  update(){this.x+=this.vx;this.y+=this.vy;this.r+=.06;this.life-=this.decay;}
+  update(){this.x+=this.vx;this.y+=this.vy;this.r+=.05;this.life-=this.decay;}
   draw(){
-    ctx.save();ctx.globalAlpha=this.life*.09;
+    ctx.save();ctx.globalAlpha=this.life*.08;
     const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r);
-    g.addColorStop(0,`hsla(${this.hue},50%,45%,1)`);g.addColorStop(1,'transparent');
+    g.addColorStop(0,`hsla(${this.hue},48%,42%,1)`);g.addColorStop(1,'transparent');
     ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
     ctx.fillStyle=g;ctx.fill();ctx.restore();
   }
 }
 
-let colonies=[],spores=[],clouds=[],running=false,autoT=0,time=0;
+let colonies=[],spores=[],clouds=[],running=false,autoT=0;
 
 function seedInitial(){
   const n=2+Math.floor(Math.random()*2);
@@ -363,14 +366,14 @@ function seedInitial(){
       const x=canvas.width*(.1+Math.random()*.8);
       const y=canvas.height*(.38+Math.random()*.48);
       colonies.push(new Colony(x,y));
-      for(let j=0;j<5;j++)spores.push(new Spore(x+(Math.random()-.5)*15,y));
-    },i*1300+Math.random()*400);
+      for(let j=0;j<4;j++)spores.push(new Spore(x+(Math.random()-.5)*12,y));
+    },i*1200+Math.random()*400);
   }
 }
 function autoSeed(){
-  if(!edgeReady||colonies.length>=18)return;
+  if(!edgeReady||colonies.length>=16)return;
   let p=0;
-  for(let t2=0;t2<140&&p<2;t2++){
+  for(let t=0;t<120&&p<2;t++){
     const px=Math.random()*PW,py=Math.random()*PH;
     if(edgeMap[Math.round(py)*PW+Math.round(px)]>.32||(colonies.length<2&&Math.random()<.05)){
       colonies.push(new Colony(px/PW*canvas.width,py/PH*canvas.height));p++;
@@ -379,12 +382,12 @@ function autoSeed(){
 }
 function drawVig(){
   const g=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.height*.06,canvas.width/2,canvas.height/2,canvas.height*.9);
-  g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,3,.4)');
+  g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,2,.38)');
   ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
 }
 function updateHUD(){
   const mass=colonies.reduce((a,c)=>a+c.brotes,0);
-  const cov=Math.min(100,colonies.length*6+mass*.6);
+  const cov=Math.min(100,colonies.length*6+mass*.55);
   document.getElementById('sc').textContent=colonies.length;
   document.getElementById('sm').textContent=mass;
   document.getElementById('sv').textContent=Math.round(cov);
@@ -392,13 +395,13 @@ function updateHUD(){
   document.getElementById('bp').textContent=Math.round(cov)+'%';
 }
 function loop(){
-  frameN++;time++;
-  if(frameN%10===0)updateEdges();
+  frameN++;
+  if(frameN%12===0)updateEdges();
   autoT++;if(autoT>130){autoT=0;autoSeed();}
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawVig();
   clouds=clouds.filter(c=>c.life>0);clouds.forEach(c=>{c.update();c.draw();});
-  colonies.forEach(c=>{c.update(time);c.draw(time);});
+  colonies.forEach(c=>{c.update();c.draw();});
   spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
   updateHUD();
   requestAnimationFrame(loop);
@@ -406,12 +409,12 @@ function loop(){
 document.getElementById('touch').addEventListener('pointerdown',e=>{
   if(!running)return;
   colonies.push(new Colony(e.clientX,e.clientY));
-  for(let i=0;i<14;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*18,e.clientY));
-  for(let i=0;i<4;i++)clouds.push(new Cloud(e.clientX,e.clientY));
+  for(let i=0;i<12;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*16,e.clientY));
+  for(let i=0;i<3;i++)clouds.push(new Cloud(e.clientX,e.clientY));
 });
 async function startCam(){
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject=s;await video.play();return true;
   }catch{
     try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});video.srcObject=s;await video.play();return true;}
@@ -420,7 +423,7 @@ async function startCam(){
 }
 const bgc=document.getElementById('bgc'),bctx=bgc.getContext('2d');
 bgc.width=window.innerWidth;bgc.height=window.innerHeight;
-const bgP=Array.from({length:60},()=>({x:Math.random()*bgc.width,y:Math.random()*bgc.height,r:.3+Math.random()*1.6,vx:(Math.random()-.5)*.22,vy:-(0.04+Math.random()*.3),life:Math.random(),decay:.001+Math.random()*.0022,hue:245+Math.random()*50}));
+const bgP=Array.from({length:50},()=>({x:Math.random()*bgc.width,y:Math.random()*bgc.height,r:.3+Math.random()*1.5,vx:(Math.random()-.5)*.2,vy:-(0.03+Math.random()*.28),life:Math.random(),decay:.001+Math.random()*.002,hue:248+Math.random()*45}));
 let bgR=true;
 function animBg(){
   if(!bgR)return;
@@ -428,10 +431,10 @@ function animBg(){
   bgP.forEach(p=>{
     p.x+=p.vx;p.y+=p.vy;p.life-=p.decay;
     if(p.life<0){p.life=.7+Math.random()*.4;p.y=bgc.height+5;p.x=Math.random()*bgc.width;}
-    bctx.save();bctx.globalAlpha=p.life*.4;
-    const g=bctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.5);
-    g.addColorStop(0,`hsl(${p.hue},80%,65%)`);g.addColorStop(1,'transparent');
-    bctx.beginPath();bctx.arc(p.x,p.y,p.r*2.5,0,Math.PI*2);
+    bctx.save();bctx.globalAlpha=p.life*.38;
+    const g=bctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.2);
+    g.addColorStop(0,`hsl(${p.hue},78%,62%)`);g.addColorStop(1,'transparent');
+    bctx.beginPath();bctx.arc(p.x,p.y,p.r*2.2,0,Math.PI*2);
     bctx.fillStyle=g;bctx.fill();bctx.restore();
   });
   requestAnimationFrame(animBg);
