@@ -16,6 +16,7 @@ body{background:#000;overflow:hidden;touch-action:none;}
 #s button{background:none;border:1px solid #7c3aed44;color:#e9d5ff;font-family:monospace;font-size:11px;letter-spacing:.2em;padding:14px 36px;cursor:pointer;}
 #hud{position:fixed;top:12px;left:14px;z-index:10;pointer-events:none;font-family:monospace;font-size:9px;color:#a855f744;letter-spacing:.1em;line-height:1.8;}
 </style>
+</div>
 </head>
 <body>
 <video id="v" autoplay playsinline muted></video>
@@ -49,7 +50,7 @@ function updE(){
     const i=y*80+x;
     const gx=-g[i-81]+g[i-79]-2*g[i-1]+2*g[i+1]-g[i+79]+g[i+81];
     const gy=-g[i-81]-2*g[i-80]-g[i-79]+g[i+79]+2*g[i+80]+g[i+81];
-    EM[i]=EM[i]*.25+Math.min(1,Math.sqrt(gx*gx+gy*gy)*3.5)*.75;
+    EM[i]=EM[i]*.2+Math.min(1,Math.sqrt(gx*gx+gy*gy)*3.5)*.8;
   }
   eR=true;
 }
@@ -59,6 +60,7 @@ function eAt(sx,sy){
   const py=Math.max(0,Math.min(44,Math.round(sy/C.height*45)));
   return EM[py*80+px];
 }
+// Find best edge nearby
 function snap(x,y,r){
   let bv=0,bx=x,by=y;
   for(let i=0;i<28;i++){
@@ -67,25 +69,24 @@ function snap(x,y,r){
     const v=eAt(tx,ty);
     if(v>bv){bv=v;bx=tx;by=ty;}
   }
-  return bv>0.1?{x:bx,y:by}:{x,y};
+  return bv>0.08?{x:bx,y:by}:{x,y};
 }
 
-// ── Coral cluster (drawn first = behind tendrils) ─────────
+// ── Draw coral cluster ────────────────────────────────────
 function drawCluster(cx,cy,radius,hue,baselit,alpha){
   if(radius<1||alpha<.01)return;
-  const n=Math.max(2,Math.round(radius/5));
+  const n=Math.max(2,Math.round(radius/4));
   X.save();
   // Outer haze
-  X.globalAlpha=alpha*.1;
-  const gh=X.createRadialGradient(cx,cy,0,cx,cy,radius*2.4);
-  gh.addColorStop(0,`hsl(${hue},60%,${baselit}%)`);
-  gh.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,radius*2.4,0,6.28);X.fillStyle=gh;X.fill();
+  X.globalAlpha=alpha*.09;
+  const gh=X.createRadialGradient(cx,cy,0,cx,cy,radius*2.2);
+  gh.addColorStop(0,`hsl(${hue},60%,${baselit}%)`);gh.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,radius*2.2,0,6.28);X.fillStyle=gh;X.fill();
   // Lobes
   for(let i=0;i<n;i++){
     const la=(i/n)*6.28+(cx*.007+cy*.005);
-    const lr=radius*(.3+((i*7919)%100/100)*.4);
-    const lx=cx+Math.cos(la)*radius*.3,ly=cy+Math.sin(la)*radius*.3;
+    const lr=radius*(.28+((i*7919)%100/100)*.42);
+    const lx=cx+Math.cos(la)*radius*.28,ly=cy+Math.sin(la)*radius*.28;
     const ll=baselit+8+((i*31)%22);
     X.globalAlpha=alpha*.72;
     const g=X.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
@@ -94,57 +95,46 @@ function drawCluster(cx,cy,radius,hue,baselit,alpha){
     g.addColorStop(.8,`hsl(${hue+12},60%,${ll}%)`);
     g.addColorStop(1,`hsl(${hue+22},50%,${Math.max(8,ll-18)}%)`);
     X.beginPath();
-    const ps=8;
-    for(let p=0;p<=ps;p++){
-      const pa=(p/ps)*6.28;
-      const pv=((p*17+i*31+Math.round(cx))%10)/10;
+    for(let p=0;p<=8;p++){
+      const pa=(p/8)*6.28,pv=((p*17+i*31+Math.round(cx))%10)/10;
       const pr=lr*(.76+pv*.44);
       p===0?X.moveTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr):X.lineTo(lx+Math.cos(pa)*pr,ly+Math.sin(pa)*pr);
     }
-    X.closePath();
-    X.fillStyle=g;X.shadowBlur=lr*.8;X.shadowColor=`hsl(${hue},72%,${baselit+18}%)`;X.fill();
+    X.closePath();X.fillStyle=g;X.shadowBlur=lr*.8;X.shadowColor=`hsl(${hue},72%,${baselit+18}%)`;X.fill();
   }
-  // Center
-  X.globalAlpha=alpha*.55;
-  const gc=X.createRadialGradient(cx-radius*.14,cy-radius*.18,0,cx,cy,radius*.58);
+  // Center highlight
+  X.globalAlpha=alpha*.5;
+  const gc=X.createRadialGradient(cx-radius*.14,cy-radius*.18,0,cx,cy,radius*.55);
   gc.addColorStop(0,`hsl(${hue-12},40%,${Math.min(88,baselit+40)}%)`);
-  gc.addColorStop(.5,`hsl(${hue},52%,${baselit+18}%)`);
-  gc.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,radius*.58,0,6.28);X.fillStyle=gc;X.fill();
+  gc.addColorStop(.5,`hsl(${hue},52%,${baselit+18}%)`);gc.addColorStop(1,'transparent');
+  X.beginPath();X.arc(cx,cy,radius*.55,0,6.28);X.fillStyle=gc;X.fill();
   X.restore();
 }
 
-// ── Draw tendril path ─────────────────────────────────────
-function drawTendril(pts,hue,depth,colOp){
-  if(pts.length<2)return;
-  const lit=35+depth*6;
-  const thick=Math.max(0.8,2.8-depth*.32);
-
-  // Thick glowing outer stroke
+// ── Draw one tendril path ─────────────────────────────────
+function drawTendril(pts,hue,depth,alpha){
+  if(pts.length<2||alpha<.01)return;
+  const lit=38+depth*5;
+  const thick=Math.max(1.2,3.5-depth*.38);
   X.save();
-  X.globalAlpha=colOp*.65;
-  X.strokeStyle=`hsl(${hue},72%,${lit+8}%)`;
-  X.lineWidth=thick*2.2;
+  // Outer glow
+  X.globalAlpha=alpha*.6;
+  X.strokeStyle=`hsl(${hue},78%,${lit+10}%)`;
+  X.lineWidth=thick*2.5;
   X.lineCap='round';X.lineJoin='round';
-  X.shadowBlur=thick*6;
-  X.shadowColor=`hsl(${hue},90%,${lit+18}%)`;
-  X.beginPath();
-  X.moveTo(pts[0].x,pts[0].y);
+  X.shadowBlur=thick*7;X.shadowColor=`hsl(${hue},92%,${lit+20}%)`;
+  X.beginPath();X.moveTo(pts[0].x,pts[0].y);
   for(let i=1;i<pts.length;i++){
     if(i<pts.length-1){
       const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;
       X.quadraticCurveTo(pts[i].x,pts[i].y,mx,my);
-    } else {
-      X.lineTo(pts[i].x,pts[i].y);
-    }
+    } else X.lineTo(pts[i].x,pts[i].y);
   }
   X.stroke();
-  // Bright inner core stroke
-  X.globalAlpha=colOp*.85;
-  X.strokeStyle=`hsl(${hue-5},55%,${Math.min(90,lit+30)}%)`;
-  X.lineWidth=thick*.55;
-  X.shadowBlur=thick*2;
-  X.stroke();
+  // Bright inner
+  X.globalAlpha=alpha*.9;
+  X.strokeStyle=`hsl(${hue-5},55%,${Math.min(92,lit+32)}%)`;
+  X.lineWidth=thick*.6;X.shadowBlur=thick*2.5;X.stroke();
   X.restore();
 }
 
@@ -152,51 +142,43 @@ function drawTendril(pts,hue,depth,colOp){
 class Tendril{
   constructor(x,y,angle,col,depth){
     this.x=x;this.y=y;this.a=angle;this.col=col;this.d=depth;
-    this.pts=[{x,y}];
-    this.len=0;
-    this.maxLen=50+Math.random()*70-depth*8;
-    this.maxLen=Math.max(22,this.maxLen);
-    this.stepSz=2.8+Math.random()*2.5;
-    this.alive=true;
-    this.spawnAt=18+Math.floor(Math.random()*18);
-    this.spawned=false;
-    this.hue=col.hue+depth*5+(Math.random()-.5)*14;
+    this.pts=[{x,y}];this.len=0;
+    this.maxLen=55+Math.random()*65-depth*7;
+    this.maxLen=Math.max(25,this.maxLen);
+    this.sz=2.5+Math.random()*2;
+    this.alive=true;this.spawnAt=16+Math.floor(Math.random()*16);
+    this.spawned=false;this.hue=col.hue+depth*4+(Math.random()-.5)*14;
     this.wgl=0;
   }
   advance(){
     if(!this.alive)return;
     if(this.len>=this.maxLen){this.alive=false;return;}
-    // Steer toward edges — 9 candidates
     let bS=-1,bA=this.a;
     for(let c=0;c<9;c++){
       const sp=(c/8-.5)*.95,ta=this.a+sp;
-      const tx=this.x+Math.cos(ta)*this.stepSz*1.9;
-      const ty=this.y+Math.sin(ta)*this.stepSz*1.9;
+      const tx=this.x+Math.cos(ta)*this.sz*2,ty=this.y+Math.sin(ta)*this.sz*2;
       if(tx<2||tx>C.width-2||ty<2||ty>C.height-2)continue;
       const e=eAt(tx,ty);
-      // Strong edge bias (0.75) + forward momentum + tiny random
-      const score=e*.75+Math.cos(sp)*.18+Math.random()*.07;
+      const score=e*.72+Math.cos(sp)*.18+Math.random()*.1;
       if(score>bS){bS=score;bA=ta;}
     }
     this.wgl+=(bA-this.a)*.42;this.wgl*=.68;
     this.a+=this.wgl*.5+(Math.random()-.5)*.04;
-    this.x+=Math.cos(this.a)*this.stepSz;
-    this.y+=Math.sin(this.a)*this.stepSz;
-    this.len+=this.stepSz;
-    this.pts.push({x:this.x,y:this.y});
+    this.x+=Math.cos(this.a)*this.sz;this.y+=Math.sin(this.a)*this.sz;
+    this.len+=this.sz;this.pts.push({x:this.x,y:this.y});
     if(!this.spawned&&this.len>=this.spawnAt){
       this.spawned=true;
-      // Branch into 1–2 new tendrils
-      if(this.d<6&&this.col.tendrils.length<this.col.maxT){
+      if(this.d<5&&this.col.tendrils.length<this.col.maxT){
         const n=this.d<2?(Math.random()<.6?2:1):1;
         for(let i=0;i<n;i++){
-          const da=(Math.random()-.5)*(this.d<2?.85:1.15);
+          const da=(Math.random()-.5)*(this.d<2?.85:1.1);
           this.col.tendrils.push(new Tendril(this.x,this.y,this.a+da,this.col,this.d+1));
         }
       }
-      // Drop coral node at branch point
       if(this.col.nodes.length<this.col.maxN){
-        this.col.nodes.push({x:this.x,y:this.y,r:0,tr:(this.d===0?18:this.d===1?12:this.d===2?8:this.d===3?5:3.5)+Math.random()*5,hue:this.hue,lit:18+this.d*8,op:0,gr:.15+Math.random()*.18});
+        this.col.nodes.push({x:this.x,y:this.y,r:0,
+          tr:(this.d===0?18:this.d===1?12:this.d===2?8:this.d===3?6:4)+Math.random()*5,
+          hue:this.hue,lit:18+this.d*8,op:0,gr:.16+Math.random()*.18});
       }
     }
     if(this.x<1||this.x>C.width-1||this.y<1||this.y>C.height-1)this.alive=false;
@@ -206,61 +188,49 @@ class Tendril{
 // ── Colony ────────────────────────────────────────────────
 class Colony{
   constructor(x,y){
-    const s=snap(x,y,90);
+    const s=snap(x,y,85);
     this.x=s.x;this.y=s.y;this.op=0;this.age=0;
-    this.hue=250+Math.random()*35;
+    this.hue=248+Math.random()*38;
     this.tendrils=[];this.nodes=[];
-    this.maxT=30+Math.floor(Math.random()*20);
-    this.maxN=20+Math.floor(Math.random()*16);
-    this.spt=55+Math.random()*50;
-    // Seed arms
-    const arms=2+Math.floor(Math.random()*3);
+    this.maxT=35+Math.floor(Math.random()*25);
+    this.maxN=22+Math.floor(Math.random()*18);
+    this.spt=50+Math.random()*45;
+    const arms=3+Math.floor(Math.random()*3); // more arms = denser from start
     for(let i=0;i<arms;i++)
-      this.tendrils.push(new Tendril(this.x,this.y,(i/arms)*6.28+Math.random()*.5,this,0));
-    // Root coral node
-    this.nodes.push({x:this.x,y:this.y,r:0,tr:20+Math.random()*8,hue:this.hue,lit:16,op:0,gr:.18});
+      this.tendrils.push(new Tendril(this.x,this.y,(i/arms)*6.28+Math.random()*.4,this,0));
+    this.nodes.push({x:this.x,y:this.y,r:0,tr:20+Math.random()*10,hue:this.hue,lit:16,op:0,gr:.18});
   }
   update(){
-    this.age++;this.op=Math.min(.95,this.op+.007);
-    // Advance tendrils
+    this.age++;this.op=Math.min(.95,this.op+.008);
     this.tendrils.forEach(t=>t.advance());
-    // Grow coral nodes
-    this.nodes.forEach(n=>{
-      n.op=Math.min(1,n.op+.04);
-      if(n.r<n.tr)n.r=Math.min(n.tr,n.r+n.gr);
-    });
+    this.nodes.forEach(n=>{n.op=Math.min(1,n.op+.04);if(n.r<n.tr)n.r=Math.min(n.tr,n.r+n.gr);});
     this.spt--;
     if(this.spt<=0&&this.nodes.length>1){
-      this.spt=40+Math.random()*40;
+      this.spt=38+Math.random()*38;
       const src=this.nodes[Math.floor(Math.random()*this.nodes.length)];
       for(let i=0;i<3;i++)spores.push(new Spore(src.x,src.y));
     }
   }
   draw(){
-    // 1. Draw coral nodes FIRST (behind)
+    // Clusters behind
     [...this.nodes].sort((a,b)=>b.tr-a.tr).forEach(n=>{
       if(n.r<1||n.op<.01)return;
       drawCluster(n.x,n.y,n.r*n.op,n.hue,n.lit,this.op*n.op);
     });
-    // 2. Draw tendrils ON TOP — always visible
+    // Tendrils on top
     this.tendrils.forEach(t=>drawTendril(t.pts,t.hue,t.d,this.op));
   }
 }
 
-// ── Spore ─────────────────────────────────────────────────
 class Spore{
   constructor(x,y){
-    this.x=x;this.y=y;
-    this.vx=(Math.random()-.5)*1.1;this.vy=-(Math.random()*.85+.08);
-    this.life=1;this.dc=.003+Math.random()*.005;
-    this.r=.4+Math.random()*1.1;this.hue=250+Math.random()*38;
+    this.x=x;this.y=y;this.vx=(Math.random()-.5)*1.1;this.vy=-(Math.random()*.8+.08);
+    this.life=1;this.dc=.003+Math.random()*.005;this.r=.4+Math.random()*1.1;this.hue=250+Math.random()*38;
   }
   update(){
     this.x+=this.vx;this.y+=this.vy;this.vy+=.008;this.life-=this.dc;
-    if(this.life<.2&&Math.random()<.003&&cols.length<13){
-      if(eAt(this.x,this.y)>.07||Math.random()<.09){
-        cols.push(new Colony(this.x,this.y));this.life=0;
-      }
+    if(this.life<.2&&Math.random()<.004&&cols.length<18){
+      if(eAt(this.x,this.y)>.06||Math.random()<.12){cols.push(new Colony(this.x,this.y));this.life=0;}
     }
   }
   draw(){
@@ -271,45 +241,58 @@ class Spore{
   }
 }
 
-// ── Main loop ─────────────────────────────────────────────
 let cols=[],spores=[],running=false,at=0;
+
+// Seed aggressively across the whole screen from the start
 function seed(){
-  const n=2+Math.floor(Math.random()*2);
-  for(let i=0;i<n;i++)setTimeout(()=>{
-    cols.push(new Colony(C.width*(.15+Math.random()*.7),C.height*(.4+Math.random()*.45)));
-  },i*1200+Math.random()*400);
+  // 6 colonies spread across screen immediately
+  const positions=[
+    [.15,.45],[.5,.38],[.82,.42],
+    [.28,.72],[.65,.68],[.45,.55]
+  ];
+  positions.forEach((p,i)=>setTimeout(()=>{
+    cols.push(new Colony(C.width*p[0],C.height*p[1]));
+  },i*400+Math.random()*200));
 }
+
 function autoSeed(){
-  if(!eR||cols.length>=12)return;
-  for(let t=0;t<100;t++){
-    const px=Math.random()*80,py=Math.random()*45;
-    if(EM[Math.round(py)*80+Math.round(px)]>.32){
-      cols.push(new Colony(px/80*C.width,py/45*C.height));return;
+  if(cols.length>=18)return;
+  // Try edge first, fallback to random
+  if(eR){
+    for(let t=0;t<80;t++){
+      const px=Math.random()*80,py=Math.random()*45;
+      if(EM[Math.round(py)*80+Math.round(px)]>.25){
+        cols.push(new Colony(px/80*C.width,py/45*C.height));return;
+      }
     }
   }
+  // Fallback: random position
+  if(cols.length<8)
+    cols.push(new Colony(C.width*(.1+Math.random()*.8),C.height*(.35+Math.random()*.5)));
 }
+
 function loop(){
-  fN++;
-  if(fN%14===0)updE();
-  at++;if(at>130){at=0;autoSeed();}
+  fN++;if(fN%12===0)updE();
+  at++;if(at>80){at=0;autoSeed();}
   X.clearRect(0,0,C.width,C.height);
   const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.05,C.width/2,C.height/2,C.height*.9);
-  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.3)');
+  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.28)');
   X.fillStyle=vg;X.fillRect(0,0,C.width,C.height);
   cols.forEach(c=>{c.update();c.draw();});
   spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
-  const tot=cols.reduce((a,c)=>a+c.nodes.length,0);
-  document.getElementById('info').textContent=cols.length+' col · '+tot+' nodos';
+  document.getElementById('info').textContent=cols.length+' col · '+cols.reduce((a,c)=>a+c.nodes.length,0)+' nodos';
   requestAnimationFrame(loop);
 }
+
 document.getElementById('t').addEventListener('pointerdown',e=>{
   if(!running)return;
   cols.push(new Colony(e.clientX,e.clientY));
-  for(let i=0;i<8;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*14,e.clientY));
+  for(let i=0;i<10;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*14,e.clientY));
 });
+
 document.getElementById('btn').addEventListener('click',async()=>{
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
     V.srcObject=s;await V.play();
   }catch(e){}
   const el=document.getElementById('s');
