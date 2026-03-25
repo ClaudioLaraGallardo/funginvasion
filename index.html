@@ -5,446 +5,296 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>FUNGI AR</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono&display=swap');
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{background:#000;overflow:hidden;width:100vw;height:100vh;touch-action:none;}
-  #video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
-  #canvas{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;}
-  #touch{position:fixed;inset:0;z-index:3;}
-  #ecv,#scv{position:fixed;display:none;}
-  #hud{position:fixed;top:0;left:0;right:0;z-index:10;pointer-events:none;padding:14px 16px;display:flex;justify-content:space-between;}
-  .ht{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,5vw,28px);letter-spacing:.2em;color:#b084e8;text-shadow:0 0 14px #7c3aed44;line-height:1;}
-  .hs{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed30;letter-spacing:.18em;margin-top:2px;}
-  .hr{font-family:'Space Mono',monospace;font-size:8px;color:#a855f730;letter-spacing:.07em;line-height:1.9;text-align:right;}
-  #bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;display:flex;align-items:center;gap:8px;}
-  .bl{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed40;letter-spacing:.14em;white-space:nowrap;}
-  .bt{width:80px;height:1px;background:#7c3aed12;}
-  .bf{height:100%;background:linear-gradient(90deg,#2e1065,#a855f7);box-shadow:0 0 4px #7c3aed;width:0%;transition:width .5s;}
-  .bp{font-family:'Space Mono',monospace;font-size:7px;color:#a855f740;width:24px;}
-  #start{position:fixed;inset:0;z-index:20;background:radial-gradient(ellipse at 50% 60%,#08011a 0%,#010004 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity 1.4s;}
-  #bgc{position:absolute;inset:0;pointer-events:none;}
-  .si{position:relative;z-index:2;text-align:center;padding:32px;}
-  .si h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(68px,18vw,110px);color:#a855f7;letter-spacing:.14em;line-height:.85;text-shadow:0 0 50px #7c3aed77,0 0 100px #4c1d9533;animation:gl 3.5s ease-in-out infinite;}
-  @keyframes gl{0%,100%{text-shadow:0 0 50px #7c3aed77,0 0 100px #4c1d9533;}50%{text-shadow:0 0 80px #a855f7aa,0 0 140px #7c3aed55;}}
-  .si .sub{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.35em;color:#7c3aed33;margin:5px 0 40px;}
-  .btn{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:#e9d5ff;background:transparent;border:1px solid #7c3aed28;padding:15px 38px;cursor:pointer;transition:all .3s;}
-  .btn:hover,.btn:active{border-color:#a855f7;background:#7c3aed0a;}
-  .hint{font-family:'Space Mono',monospace;font-size:7px;color:#7c3aed22;letter-spacing:.2em;margin-top:16px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;overflow:hidden;touch-action:none;}
+#v{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;}
+#c{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;}
+#t{position:fixed;inset:0;z-index:3;}
+#s{position:fixed;inset:0;z-index:20;background:#05000f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 1s;}
+#s h1{font-family:serif;font-size:15vw;color:#a855f7;letter-spacing:.1em;text-shadow:0 0 40px #7c3aed;}
+#s p{color:#7c3aed88;font-size:11px;letter-spacing:.3em;font-family:monospace;}
+#s button{background:none;border:1px solid #7c3aed55;color:#e9d5ff;font-family:monospace;font-size:11px;letter-spacing:.2em;padding:14px 36px;cursor:pointer;}
+#hud{position:fixed;top:12px;left:14px;z-index:10;pointer-events:none;font-family:monospace;font-size:9px;color:#a855f755;letter-spacing:.1em;}
+#inf{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;font-family:monospace;font-size:8px;color:#7c3aed44;letter-spacing:.2em;}
 </style>
 </head>
 <body>
-<video id="video" autoplay playsinline muted></video>
-<canvas id="ecv"></canvas><canvas id="scv"></canvas>
-<canvas id="canvas"></canvas>
-<div id="touch"></div>
-<div id="hud">
-  <div><div class="ht">FUNGI</div><div class="hs">SURFACE AR</div></div>
-  <div class="hr">COL: <span id="sc">0</span><br>BROTES: <span id="sm">0</span><br>COB: <span id="sv">0</span>%</div>
-</div>
-<div id="bar">
-  <span class="bl">INFECCIÓN</span>
-  <div class="bt"><div class="bf" id="bf"></div></div>
-  <span class="bp" id="bp">0%</span>
-</div>
-<div id="start">
-  <canvas id="bgc"></canvas>
-  <div class="si">
-    <h1>FUNGI</h1>
-    <p class="sub">AR · COLONIZACIÓN MICELIAL</p>
-    <button class="btn" id="startBtn">INICIAR INVASIÓN</button>
-    <p class="hint">TOCA PARA SEMBRAR · SE ADAPTA A SUPERFICIES</p>
-  </div>
+<video id="v" autoplay playsinline muted></video>
+<canvas id="c"></canvas>
+<div id="t"></div>
+<div id="hud">FUNGI AR<br><span id="info">0 colonias</span></div>
+<div id="inf">TOCA PARA SEMBRAR</div>
+<div id="s">
+  <h1>FUNGI</h1>
+  <p>AR · COLONIZACIÓN MICELIAL</p>
+  <button id="btn">INICIAR INVASIÓN</button>
+  <p style="font-size:9px;opacity:.4">Se adapta a las superficies</p>
 </div>
 
 <script>
-const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
-const video=document.getElementById('video');
-const ecv=document.getElementById('ecv'),scv=document.getElementById('scv');
-const sctx=scv.getContext('2d',{willReadFrequently:true});
-const PW=120,PH=68; // smaller = faster edge detection
-ecv.width=PW;ecv.height=PH;scv.width=PW;scv.height=PH;
-function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
-resize();window.addEventListener('resize',resize);
+// ── Minimal setup ─────────────────────────────────────────
+const C = document.getElementById('c');
+const X = C.getContext('2d');
+const V = document.getElementById('v');
+const SC = document.getElementById('scv') || (() => {
+  const el = document.createElement('canvas');
+  el.width = 80; el.height = 45;
+  return el;
+})();
+const SX = SC.getContext('2d', {willReadFrequently: true});
+SC.width = 80; SC.height = 45;
 
-// ── Pre-render coral stamp library ────────────────────────
-// We create a set of offscreen canvases with organic coral shapes
-// then just drawImage() them at runtime — very fast
-const STAMP_COUNT = 24;
-const STAMP_SIZES = [8,12,16,22,30,40]; // px radii
-const stamps = []; // stamps[sizeIdx][stampIdx] = {canvas, hue, lit}
+W = () => C.width = window.innerWidth;
+H = () => C.height = window.innerHeight;
+W(); H();
+window.addEventListener('resize', () => { W(); H(); });
 
-// Build one stamp: organic multi-lobe shape on offscreen canvas
-function buildStamp(radius, hue, lit){
-  const sz = radius*3;
-  const oc = document.createElement('canvas');
-  oc.width=sz; oc.height=sz;
-  const ox=oc.getContext('2d');
-  const cx=sz/2, cy=sz/2;
-
-  // Outer glow
-  const gGlow=ox.createRadialGradient(cx,cy,0,cx,cy,sz/2);
-  gGlow.addColorStop(0,`hsla(${hue},70%,${lit+5}%,0.15)`);
-  gGlow.addColorStop(1,'transparent');
-  ox.beginPath();ox.arc(cx,cy,sz/2,0,Math.PI*2);
-  ox.fillStyle=gGlow;ox.fill();
-
-  // 3–5 irregular lobes
-  const lobes=3+Math.floor(Math.random()*3);
-  for(let l=0;l<lobes;l++){
-    const la=(l/lobes)*Math.PI*2+Math.random()*.5;
-    const lr=radius*(0.4+Math.random()*.35);
-    const lx=cx+Math.cos(la)*radius*.32;
-    const ly=cy+Math.sin(la)*radius*.32;
-    const lobeLit=lit+8+Math.random()*18;
-    const g=ox.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr*1.1);
-    g.addColorStop(0,`hsl(${hue-10},52%,${Math.min(88,lobeLit+28)}%)`);
-    g.addColorStop(0.4,`hsl(${hue},62%,${lobeLit+8}%)`);
-    g.addColorStop(0.8,`hsl(${hue+12},58%,${Math.max(12,lobeLit-8)}%)`);
-    g.addColorStop(1,`hsl(${hue+20},48%,${Math.max(5,lobeLit-22)}%)`);
-
-    // Irregular lobe path (pre-computed polygon)
-    ox.beginPath();
-    const pts=10;
-    const rands=Array.from({length:pts},()=>0.75+Math.random()*.5);
-    for(let p=0;p<=pts;p++){
-      const pa=(p/pts)*Math.PI*2;
-      const r2=lr*rands[p%pts];
-      ox.lineTo(lx+Math.cos(pa)*r2, ly+Math.sin(pa)*r2);
-    }
-    ox.closePath();
-    ox.fillStyle=g;
-    ox.shadowBlur=lr*.7;ox.shadowColor=`hsl(${hue},75%,${lit+18}%)`;
-    ox.fill();
+// ── Edge detection (tiny 80x45) ───────────────────────────
+let emap = new Float32Array(80 * 45);
+let eready = false;
+function edges() {
+  if (V.readyState < 2) return;
+  SX.drawImage(V, 0, 0, 80, 45);
+  const d = SX.getImageData(0, 0, 80, 45).data;
+  const g = new Float32Array(80 * 45);
+  for (let i = 0; i < 3600; i++) g[i] = (d[i*4]*.3 + d[i*4+1]*.59 + d[i*4+2]*.11) / 255;
+  for (let y = 1; y < 44; y++) for (let x = 1; x < 79; x++) {
+    const i = y*80+x;
+    const gx = -g[i-81]+g[i-79]-2*g[i-1]+2*g[i+1]-g[i+79]+g[i+81];
+    const gy = -g[i-81]-2*g[i-80]-g[i-79]+g[i+79]+2*g[i+80]+g[i+81];
+    emap[i] = emap[i]*.3 + Math.min(1, Math.sqrt(gx*gx+gy*gy)*3) * .7;
   }
-
-  // Central cap highlight
-  const cg=ox.createRadialGradient(cx-radius*.12,cy-radius*.18,0,cx,cy,radius*.65);
-  cg.addColorStop(0,`hsla(${hue-15},40%,${Math.min(90,lit+42)}%,0.7)`);
-  cg.addColorStop(.5,`hsla(${hue},55%,${lit+18}%,0.5)`);
-  cg.addColorStop(1,'transparent');
-  ox.beginPath();ox.arc(cx,cy,radius*.65,0,Math.PI*2);
-  ox.fillStyle=cg;ox.fill();
-
-  return oc;
+  eready = true;
+}
+function eat(sx, sy) {
+  if (!eready) return 0;
+  const px = Math.max(0, Math.min(79, Math.round(sx / C.width * 80)));
+  const py = Math.max(0, Math.min(44, Math.round(sy / C.height * 45)));
+  return emap[py*80+px];
 }
 
-// Pre-build stamp library for different hue/lit combos and sizes
-// Hue bands: deep blue-violet (245) → violet (270) → lila (290)
-const HUE_BANDS = [
-  {hue:245, lit:15}, // dark base
-  {hue:258, lit:22},
-  {hue:268, lit:30},
-  {hue:275, lit:40},
-  {hue:280, lit:52},
-  {hue:285, lit:62}, // bright tip
-];
-
-const stampLib = {}; // key: `${sizeIdx}_${hueIdx}` → array of canvases
-function buildLibrary(){
-  HUE_BANDS.forEach((band,hi)=>{
-    STAMP_SIZES.forEach((r,si)=>{
-      const key=`${si}_${hi}`;
-      stampLib[key]=[];
-      for(let v=0;v<4;v++){ // 4 variants per combo
-        stampLib[key].push(buildStamp(r, band.hue+Math.random()*10-5, band.lit+Math.random()*8-4));
-      }
-    });
-  });
-}
-buildLibrary();
-
-function getStamp(radius, depthFrac){
-  // depthFrac: 0=base, 1=tip
-  const si=Math.min(STAMP_SIZES.length-1, Math.round(radius/7));
-  const hi=Math.min(HUE_BANDS.length-1, Math.round(depthFrac*(HUE_BANDS.length-1)));
-  const key=`${si}_${hi}`;
-  const arr=stampLib[key];
-  return arr[Math.floor(Math.random()*arr.length)];
-}
-
-// ── Edge map ──────────────────────────────────────────────
-let edgeMap=new Float32Array(PW*PH),edgeReady=false,frameN=0;
-function updateEdges(){
-  if(video.readyState<2)return;
-  sctx.drawImage(video,0,0,PW,PH);
-  const d=sctx.getImageData(0,0,PW,PH).data;
-  const g=new Float32Array(PW*PH);
-  for(let i=0;i<PW*PH;i++)g[i]=(d[i*4]*.299+d[i*4+1]*.587+d[i*4+2]*.114)/255;
-  const n=new Float32Array(PW*PH);
-  for(let y=1;y<PH-1;y++)for(let x=1;x<PW-1;x++){
-    const i=y*PW+x;
-    const gx=-g[i-PW-1]+g[i-PW+1]-2*g[i-1]+2*g[i+1]-g[i+PW-1]+g[i+PW+1];
-    const gy=-g[i-PW-1]-2*g[i-PW]-g[i-PW+1]+g[i+PW-1]+2*g[i+PW]+g[i+PW+1];
-    n[i]=Math.min(1,Math.sqrt(gx*gx+gy*gy)*3.5);
+// ── Find best nearby edge point ───────────────────────────
+function snapped(x, y, r) {
+  let bv = 0, bx = x, by = y;
+  for (let i = 0; i < 24; i++) {
+    const a = i/24*Math.PI*2, d = r*(.1+Math.random()*.9);
+    const tx = x+Math.cos(a)*d, ty = y+Math.sin(a)*d;
+    const v = eat(tx, ty);
+    if (v > bv) { bv = v; bx = tx; by = ty; }
   }
-  for(let i=0;i<PW*PH;i++)edgeMap[i]=edgeMap[i]*.25+n[i]*.75;
-  edgeReady=true;
+  return bv > 0.1 ? {x:bx, y:by} : {x, y};
 }
-function eAt(sx,sy){
-  if(!edgeReady)return 0;
-  const px=Math.max(0,Math.min(PW-1,Math.round(sx/canvas.width*PW)));
-  const py=Math.max(0,Math.min(PH-1,Math.round(sy/canvas.height*PH)));
-  return edgeMap[py*PW+px];
+
+// ── Draw one organic coral lump (fast — just 2 arc calls) ─
+function lump(x, y, r, hue, lit, a) {
+  if (r < 1) return;
+  X.save();
+  X.globalAlpha = a;
+
+  // Soft outer glow
+  const g1 = X.createRadialGradient(x, y, 0, x, y, r*2.2);
+  g1.addColorStop(0, `hsla(${hue},65%,${lit}%,.18)`);
+  g1.addColorStop(1, 'transparent');
+  X.beginPath(); X.arc(x, y, r*2.2, 0, 6.28);
+  X.fillStyle = g1; X.fill();
+
+  // Dense core with off-center highlight (gives 3D feel)
+  const g2 = X.createRadialGradient(x-r*.22, y-r*.28, r*.05, x, y, r);
+  g2.addColorStop(0, `hsl(${hue-12},52%,${Math.min(88,lit+35)}%)`);
+  g2.addColorStop(.38, `hsl(${hue},68%,${lit+12}%)`);
+  g2.addColorStop(.75, `hsl(${hue+15},62%,${lit}%)`);
+  g2.addColorStop(1, `hsl(${hue+25},55%,${Math.max(8,lit-20)}%)`);
+  X.beginPath(); X.arc(x, y, r, 0, 6.28);
+  X.fillStyle = g2;
+  X.shadowBlur = r*.9;
+  X.shadowColor = `hsl(${hue},75%,${lit+10}%)`;
+  X.fill();
+  X.restore();
 }
-function nearEdge(sx,sy,r=100){
-  let bv=0,bx=sx,by=sy;
-  for(let i=0;i<36;i++){
-    const a=i/36*Math.PI*2,d=r*(.05+Math.random()*.95);
-    const tx=sx+Math.cos(a)*d,ty=sy+Math.sin(a)*d;
-    const v=eAt(tx,ty);
-    if(v>bv){bv=v;bx=tx;by=ty;}
+
+// ── Coral cluster: many overlapping lumps = dense mass ────
+function cluster(cx, cy, radius, hue, baselit, alpha) {
+  const n = Math.max(3, Math.round(radius / 5));
+  // Back lumps (darker, larger)
+  for (let i = 0; i < n; i++) {
+    const a = (i/n)*6.28 + Math.random()*.8;
+    const r = radius*(.3+Math.random()*.45);
+    const ox = Math.cos(a)*radius*.35, oy = Math.sin(a)*radius*.35;
+    lump(cx+ox, cy+oy, r, hue+10, baselit-8, alpha*.7);
   }
-  return{x:bx,y:by,e:bv};
+  // Middle layer
+  for (let i = 0; i < Math.ceil(n*.7); i++) {
+    const a = (i/n)*6.28 + Math.random()*.6;
+    const r = radius*(.25+Math.random()*.35);
+    const ox = Math.cos(a)*radius*.18, oy = Math.sin(a)*radius*.18;
+    lump(cx+ox, cy+oy, r, hue+5, baselit+6, alpha*.85);
+  }
+  // Front center cap (lightest)
+  lump(cx, cy, radius*.45, hue-5, baselit+22, alpha*.9);
 }
 
 // ── Node ──────────────────────────────────────────────────
-class Node{
-  constructor(x,y,col,depth){
-    this.x=x;this.y=y;this.col=col;this.depth=depth;
-    this.maxDepth=col.maxDepth;
-    this.r=0;
-    const base=depth===0?18:depth===1?12:depth===2?8:depth===3?5:3.5;
-    this.targetR=base+Math.random()*base*.7;
-    this.targetR=Math.max(3,this.targetR);
-    this.growSpeed=0.2+Math.random()*0.25;
-    this.depthFrac=depth/this.maxDepth;
-    this.stamp=getStamp(this.targetR, this.depthFrac);
-    this.age=0;
-    this.opacity=0;
-    this.childTimer=18+Math.floor(Math.random()*28);
-    this.maxCh=depth<1?4:depth<3?3:depth<5?2:1;
-    this.chCount=0;
-    this.spawnDir=Math.random()*Math.PI*2;
-    this.grown=false;
-    // tendrils as simple line data (no objects)
-    this.childData=[]; // {x1,y1,x2,y2,t,hueIdx}
+class Node {
+  constructor(x, y, col, depth) {
+    this.x=x; this.y=y; this.col=col; this.d=depth;
+    const b = [20,13,8,5,3.5][Math.min(depth,4)];
+    this.tr = b + Math.random()*b*.6;
+    this.r = 0; this.gr = .18+Math.random()*.22;
+    // Color: deep blue-violet base → lila tips (matches reference)
+    this.hue = 248 + depth*7 + (Math.random()-.5)*10;
+    this.lit = 18 + depth*8 + Math.random()*10;
+    this.op = 0; this.age = 0;
+    this.ct = 20+Math.floor(Math.random()*25);
+    this.mc = [4,3,2,2,1][Math.min(depth,4)];
+    this.cc = 0; this.sa = Math.random()*6.28;
+    this.kids = []; // {x,y,t} tendril draw data
   }
-  update(){
-    this.age++;
-    this.opacity=Math.min(1,this.opacity+0.05);
-    if(!this.grown){
-      this.r=Math.min(this.targetR,this.r+this.growSpeed);
-      if(this.r>=this.targetR)this.grown=true;
-    }
-    this.childData.forEach(c=>{c.t=Math.min(1,c.t+.04);});
-    this.childTimer--;
-    if(this.childTimer<=0&&this.chCount<this.maxCh&&this.col.nodes.length<this.col.maxNodes&&this.r>this.targetR*.5){
-      this.childTimer=16+Math.floor(Math.random()*25);
-      this.trySpawn();
+  update() {
+    this.age++; this.op = Math.min(1, this.op+.05);
+    if (this.r < this.tr) this.r = Math.min(this.tr, this.r+this.gr);
+    this.kids.forEach(k => k.t = Math.min(1, k.t+.04));
+    this.ct--;
+    if (this.ct <= 0 && this.cc < this.mc && this.col.nodes.length < this.col.max && this.r > this.tr*.5) {
+      this.ct = 15+Math.floor(Math.random()*22);
+      this.spawn();
     }
   }
-  trySpawn(){
-    this.chCount++;
-    let bS=-1,bx=this.x,by=this.y,ba=this.spawnDir;
-    const spread=this.depth<2?.85:1.1;
-    for(let t=0;t<20;t++){
-      const a=this.spawnDir+(Math.random()-.5)*spread*2;
-      const dist=this.r*.65+this.targetR*.4+Math.random()*this.targetR*.5;
-      const tx=this.x+Math.cos(a)*dist,ty=this.y+Math.sin(a)*dist;
-      if(tx<2||tx>canvas.width-2||ty<2||ty>canvas.height-2)continue;
-      const e=eAt(tx,ty);
-      const sc=e*.68+Math.random()*.32;
-      if(sc>bS){bS=sc;bx=tx;by=ty;ba=a;}
+  spawn() {
+    this.cc++;
+    let bs=-1, bx=this.x, by=this.y, ba=this.sa;
+    for (let t=0; t<18; t++) {
+      const a = this.sa+(Math.random()-.5)*2;
+      const dist = this.r*.6+this.tr*.4+Math.random()*this.tr*.5;
+      const tx=this.x+Math.cos(a)*dist, ty=this.y+Math.sin(a)*dist;
+      if (tx<2||tx>C.width-2||ty<2||ty>C.height-2) continue;
+      const sc = eat(tx,ty)*.7+Math.random()*.3;
+      if (sc > bs) { bs=sc; bx=tx; by=ty; ba=a; }
     }
-    this.spawnDir=ba+(Math.random()-.5)*.6;
-    const child=new Node(bx,by,this.col,this.depth+1);
-    this.col.nodes.push(child);
-    this.childData.push({x2:bx,y2:by,t:0,hi:Math.min(HUE_BANDS.length-1,this.depth+1)});
+    this.sa = ba+(Math.random()-.5)*.6;
+    this.col.nodes.push(new Node(bx, by, this.col, this.d+1));
+    this.kids.push({x:bx, y:by, t:0, hue:this.hue});
   }
-  draw(){
-    // Draw tendrils (thin lines — very cheap)
-    this.childData.forEach(c=>{
-      if(c.t<.02)return;
-      const band=HUE_BANDS[c.hi];
-      ctx.save();
-      ctx.globalAlpha=this.col.opacity*this.opacity*c.t*.55;
-      ctx.strokeStyle=`hsl(${band.hue},60%,${band.lit+15}%)`;
-      ctx.lineWidth=Math.max(.4,1.5-this.depth*.2);
-      ctx.lineCap='round';
-      ctx.shadowBlur=3;ctx.shadowColor=`hsl(${band.hue},75%,${band.lit+20}%)`;
-      // draw partial line up to t
-      const ex=this.x+(c.x2-this.x)*c.t, ey=this.y+(c.y2-this.y)*c.t;
-      ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(ex,ey);ctx.stroke();
-      ctx.restore();
+  draw() {
+    // Tendrils
+    this.kids.forEach(k => {
+      if (k.t < .02) return;
+      const ex = this.x+(k.x-this.x)*k.t, ey = this.y+(k.y-this.y)*k.t;
+      X.save();
+      X.globalAlpha = this.col.op*this.op*k.t*.5;
+      X.strokeStyle = `hsl(${k.hue},60%,${this.lit+18}%)`;
+      X.lineWidth = Math.max(.4, 1.4-this.d*.18);
+      X.lineCap = 'round';
+      X.shadowBlur = 4; X.shadowColor = `hsl(${k.hue},70%,${this.lit+20}%)`;
+      X.beginPath(); X.moveTo(this.x,this.y); X.lineTo(ex,ey); X.stroke();
+      X.restore();
     });
-
-    // Draw stamp (pre-rendered coral shape — just drawImage, very fast)
-    if(this.r<1||!this.stamp)return;
-    const sc=this.r*2/this.stamp.width*3; // scale to current radius
-    const sw=this.stamp.width*sc, sh=this.stamp.height*sc;
-    ctx.save();
-    ctx.globalAlpha=this.col.opacity*this.opacity;
-    ctx.drawImage(this.stamp, this.x-sw/2, this.y-sh/2, sw, sh);
-    ctx.restore();
+    // Coral cluster
+    cluster(this.x, this.y, this.r*this.op, this.hue, this.lit, this.col.op*this.op);
   }
 }
 
 // ── Colony ────────────────────────────────────────────────
-class Colony{
-  constructor(x,y){
-    const anch=nearEdge(x,y,110);
-    this.x=anch.e>0.1?anch.x:x;
-    this.y=anch.e>0.1?anch.y:y;
-    this.opacity=0;
-    this.nodes=[];
-    this.age=0;
-    this.maxNodes=30+Math.floor(Math.random()*35);
-    this.maxDepth=6;
-    this.sporeTimer=60+Math.random()*70;
-    this.nodes.push(new Node(this.x,this.y,this,0));
+class Colony {
+  constructor(x, y) {
+    const s = snapped(x, y, 90);
+    this.x=s.x; this.y=s.y; this.op=0; this.age=0;
+    this.nodes=[]; this.max=25+Math.floor(Math.random()*25);
+    this.st=55+Math.random()*55;
+    this.nodes.push(new Node(this.x, this.y, this, 0));
   }
-  update(){
-    this.age++;
-    this.opacity=Math.min(0.96,this.opacity+0.008);
+  update() {
+    this.age++; this.op=Math.min(.94,this.op+.008);
     this.nodes.forEach(n=>n.update());
-    this.sporeTimer--;
-    if(this.sporeTimer<=0&&this.nodes.length>3){
-      this.sporeTimer=45+Math.random()*55;
-      const src=this.nodes[Math.floor(Math.random()*this.nodes.length)];
-      for(let i=0;i<2+Math.floor(Math.random()*3);i++)spores.push(new Spore(src.x,src.y));
-      if(Math.random()<.15)clouds.push(new Cloud(src.x,src.y));
+    this.st--;
+    if (this.st<=0 && this.nodes.length>2) {
+      this.st=40+Math.random()*50;
+      const s=this.nodes[Math.floor(Math.random()*this.nodes.length)];
+      for(let i=0;i<3;i++) spores.push(new Spore(s.x,s.y));
     }
   }
-  draw(){
-    // depth sort: large (deep) nodes first
-    const sorted=[...this.nodes].sort((a,b)=>b.targetR-a.targetR);
+  draw() {
+    const sorted=[...this.nodes].sort((a,b)=>b.tr-a.tr);
     sorted.forEach(n=>n.draw());
   }
-  get brotes(){return this.nodes.length;}
 }
 
 // ── Spore ─────────────────────────────────────────────────
-class Spore{
-  constructor(x,y){
-    this.x=x;this.y=y;
-    this.vx=(Math.random()-.5)*1.4;this.vy=-(0.05+Math.random()*1.2);
-    this.life=1;this.decay=.003+Math.random()*.005;
-    this.r=.4+Math.random()*1.4;this.hue=248+Math.random()*45;this.landed=false;
+class Spore {
+  constructor(x,y) {
+    this.x=x; this.y=y;
+    this.vx=(Math.random()-.5)*1.2; this.vy=-(Math.random()*1.1);
+    this.life=1; this.dc=.003+Math.random()*.005;
+    this.r=.4+Math.random()*1.2; this.hue=248+Math.random()*42;
   }
-  update(){
-    this.x+=this.vx;this.y+=this.vy;
-    this.vy+=.009;this.vx+=(Math.random()-.5)*.02;
-    this.life-=this.decay;
-    if(!this.landed&&this.life<.2&&Math.random()<.003&&colonies.length<18){
-      if(eAt(this.x,this.y)>0.07||Math.random()<.12){
-        colonies.push(new Colony(this.x,this.y));this.landed=true;
+  update() {
+    this.x+=this.vx; this.y+=this.vy; this.vy+=.008;
+    this.life-=this.dc;
+    if (this.life<.2&&Math.random()<.003&&cols.length<15) {
+      if (eat(this.x,this.y)>.07||Math.random()<.1) {
+        cols.push(new Colony(this.x,this.y));
+        this.life=0;
       }
     }
   }
-  draw(){
-    ctx.save();ctx.globalAlpha=this.life*.4;
-    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
-    g.addColorStop(0,`hsl(${this.hue},68%,72%)`);g.addColorStop(1,'transparent');
-    ctx.beginPath();ctx.arc(this.x,this.y,this.r*2,0,Math.PI*2);
-    ctx.fillStyle=g;ctx.fill();ctx.restore();
-  }
-}
-class Cloud{
-  constructor(x,y){
-    this.x=x+(Math.random()-.5)*30;this.y=y;
-    this.r=5+Math.random()*30;
-    this.vx=(Math.random()-.5)*.15;this.vy=-(0.03+Math.random()*.18);
-    this.life=.25+Math.random()*.35;this.decay=.0006+Math.random()*.0013;
-    this.hue=248+Math.random()*38;
-  }
-  update(){this.x+=this.vx;this.y+=this.vy;this.r+=.05;this.life-=this.decay;}
-  draw(){
-    ctx.save();ctx.globalAlpha=this.life*.08;
-    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r);
-    g.addColorStop(0,`hsla(${this.hue},48%,42%,1)`);g.addColorStop(1,'transparent');
-    ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
-    ctx.fillStyle=g;ctx.fill();ctx.restore();
+  draw() {
+    X.save(); X.globalAlpha=this.life*.35;
+    const g=X.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
+    g.addColorStop(0,`hsl(${this.hue},70%,70%)`); g.addColorStop(1,'transparent');
+    X.beginPath(); X.arc(this.x,this.y,this.r*2,0,6.28);
+    X.fillStyle=g; X.fill(); X.restore();
   }
 }
 
-let colonies=[],spores=[],clouds=[],running=false,autoT=0;
+// ── Main ──────────────────────────────────────────────────
+let cols=[], spores=[], running=false, fn=0, at=0;
 
-function seedInitial(){
+function seed() {
   const n=2+Math.floor(Math.random()*2);
-  for(let i=0;i<n;i++){
-    setTimeout(()=>{
-      const x=canvas.width*(.1+Math.random()*.8);
-      const y=canvas.height*(.38+Math.random()*.48);
-      colonies.push(new Colony(x,y));
-      for(let j=0;j<4;j++)spores.push(new Spore(x+(Math.random()-.5)*12,y));
-    },i*1200+Math.random()*400);
-  }
+  for(let i=0;i<n;i++) setTimeout(()=>{
+    cols.push(new Colony(C.width*(.15+Math.random()*.7), C.height*(.4+Math.random()*.45)));
+  }, i*1200+Math.random()*400);
 }
-function autoSeed(){
-  if(!edgeReady||colonies.length>=16)return;
-  let p=0;
-  for(let t=0;t<120&&p<2;t++){
-    const px=Math.random()*PW,py=Math.random()*PH;
-    if(edgeMap[Math.round(py)*PW+Math.round(px)]>.32||(colonies.length<2&&Math.random()<.05)){
-      colonies.push(new Colony(px/PW*canvas.width,py/PH*canvas.height));p++;
+
+function loop() {
+  fn++;
+  if(fn%14===0) edges();
+  at++; if(at>140&&eready&&cols.length<14){at=0;autoseed();}
+  X.clearRect(0,0,C.width,C.height);
+  // Vignette
+  const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.06,C.width/2,C.height/2,C.height*.9);
+  vg.addColorStop(0,'transparent'); vg.addColorStop(1,'rgba(0,0,2,.35)');
+  X.fillStyle=vg; X.fillRect(0,0,C.width,C.height);
+
+  cols.forEach(c=>{c.update();c.draw();});
+  spores=spores.filter(s=>s.life>0); spores.forEach(s=>{s.update();s.draw();});
+
+  document.getElementById('info').textContent = cols.length+' colonias · '+cols.reduce((a,c)=>a+c.nodes.length,0)+' brotes';
+  requestAnimationFrame(loop);
+}
+
+function autoseed(){
+  for(let t=0;t<100;t++){
+    const px=Math.random()*80,py=Math.random()*45;
+    if(emap[Math.round(py)*80+Math.round(px)]>.3){
+      cols.push(new Colony(px/80*C.width,py/45*C.height)); return;
     }
   }
 }
-function drawVig(){
-  const g=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.height*.06,canvas.width/2,canvas.height/2,canvas.height*.9);
-  g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,2,.38)');
-  ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
-}
-function updateHUD(){
-  const mass=colonies.reduce((a,c)=>a+c.brotes,0);
-  const cov=Math.min(100,colonies.length*6+mass*.55);
-  document.getElementById('sc').textContent=colonies.length;
-  document.getElementById('sm').textContent=mass;
-  document.getElementById('sv').textContent=Math.round(cov);
-  document.getElementById('bf').style.width=cov+'%';
-  document.getElementById('bp').textContent=Math.round(cov)+'%';
-}
-function loop(){
-  frameN++;
-  if(frameN%12===0)updateEdges();
-  autoT++;if(autoT>130){autoT=0;autoSeed();}
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawVig();
-  clouds=clouds.filter(c=>c.life>0);clouds.forEach(c=>{c.update();c.draw();});
-  colonies.forEach(c=>{c.update();c.draw();});
-  spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
-  updateHUD();
-  requestAnimationFrame(loop);
-}
-document.getElementById('touch').addEventListener('pointerdown',e=>{
+
+document.getElementById('t').addEventListener('pointerdown',e=>{
   if(!running)return;
-  colonies.push(new Colony(e.clientX,e.clientY));
-  for(let i=0;i<12;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*16,e.clientY));
-  for(let i=0;i<3;i++)clouds.push(new Cloud(e.clientX,e.clientY));
+  cols.push(new Colony(e.clientX,e.clientY));
+  for(let i=0;i<8;i++) spores.push(new Spore(e.clientX+(Math.random()-.5)*14,e.clientY));
 });
-async function startCam(){
+
+document.getElementById('btn').addEventListener('click',async()=>{
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-    video.srcObject=s;await video.play();return true;
-  }catch{
-    try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});video.srcObject=s;await video.play();return true;}
-    catch{return false;}
-  }
-}
-const bgc=document.getElementById('bgc'),bctx=bgc.getContext('2d');
-bgc.width=window.innerWidth;bgc.height=window.innerHeight;
-const bgP=Array.from({length:50},()=>({x:Math.random()*bgc.width,y:Math.random()*bgc.height,r:.3+Math.random()*1.5,vx:(Math.random()-.5)*.2,vy:-(0.03+Math.random()*.28),life:Math.random(),decay:.001+Math.random()*.002,hue:248+Math.random()*45}));
-let bgR=true;
-function animBg(){
-  if(!bgR)return;
-  bctx.clearRect(0,0,bgc.width,bgc.height);
-  bgP.forEach(p=>{
-    p.x+=p.vx;p.y+=p.vy;p.life-=p.decay;
-    if(p.life<0){p.life=.7+Math.random()*.4;p.y=bgc.height+5;p.x=Math.random()*bgc.width;}
-    bctx.save();bctx.globalAlpha=p.life*.38;
-    const g=bctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.2);
-    g.addColorStop(0,`hsl(${p.hue},78%,62%)`);g.addColorStop(1,'transparent');
-    bctx.beginPath();bctx.arc(p.x,p.y,p.r*2.2,0,Math.PI*2);
-    bctx.fillStyle=g;bctx.fill();bctx.restore();
-  });
-  requestAnimationFrame(animBg);
-}
-animBg();
-document.getElementById('startBtn').addEventListener('click',async()=>{
-  await startCam();bgR=false;
-  const s=document.getElementById('start');
-  s.style.opacity='0';setTimeout(()=>{s.style.display='none';},1400);
-  running=true;loop();seedInitial();
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    V.srcObject=stream; await V.play();
+  }catch(e){}
+  const s=document.getElementById('s');
+  s.style.opacity='0'; setTimeout(()=>s.style.display='none',1200);
+  running=true; loop(); seed();
 });
 </script>
 </body>
