@@ -29,191 +29,153 @@ const C=document.getElementById('c'),X=C.getContext('2d'),V=document.getElementB
 function rsz(){C.width=innerWidth;C.height=innerHeight;}
 rsz();window.addEventListener('resize',rsz);
 
-// ── Coral cluster — pre-computed geometry, no noise ───────
-function cluster(cx,cy,r,hue,lit,a){
+// ── Single coral puff — very cheap to draw ────────────────
+function puff(x,y,r,hue,lit,a){
   if(r<1||a<.01)return;
-  const n=Math.max(3,r/4|0);
   X.save();
-  // glow
-  X.globalAlpha=a*.07;
-  let g=X.createRadialGradient(cx,cy,0,cx,cy,r*2.2);
-  g.addColorStop(0,`hsl(${hue},60%,${lit}%)`);g.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,r*2.2,0,6.28);X.fillStyle=g;X.fill();
-  // lobes
-  for(let i=0;i<n;i++){
-    const la=(i/n)*6.28+(cx*.007);
-    const lr=r*(.3+((i*79+cx*cy|0)%10)/10*.35);
-    const lx=cx+Math.cos(la)*r*.28,ly=cy+Math.sin(la)*r*.28;
-    const ll=lit+8+((i*37+cx|0)%20);
-    X.globalAlpha=a*.8;
-    g=X.createRadialGradient(lx-lr*.2,ly-lr*.25,0,lx,ly,lr);
-    g.addColorStop(0,`hsl(${hue-8},50%,${Math.min(86,ll+24)}%)`);
-    g.addColorStop(.5,`hsl(${hue},68%,${ll+6}%)`);
-    g.addColorStop(1,`hsl(${hue+20},50%,${Math.max(8,ll-18)}%)`);
-    // simple circle per lobe — FAST
-    X.beginPath();X.arc(lx,ly,lr,0,6.28);
-    X.fillStyle=g;X.shadowBlur=lr*.7;X.shadowColor=`hsl(${hue},78%,55%)`;X.fill();
-  }
-  // cap
-  X.globalAlpha=a*.5;
-  g=X.createRadialGradient(cx-r*.15,cy-r*.2,0,cx,cy,r*.55);
-  g.addColorStop(0,`hsl(${hue-12},42%,${Math.min(90,lit+42)}%)`);
-  g.addColorStop(.5,`hsl(${hue},52%,${lit+18}%)`);g.addColorStop(1,'transparent');
-  X.beginPath();X.arc(cx,cy,r*.55,0,6.28);X.fillStyle=g;X.fill();
+  X.globalAlpha=a;
+  const g=X.createRadialGradient(x-r*.2,y-r*.25,r*.05,x,y,r);
+  g.addColorStop(0,`hsl(${hue-10},55%,${Math.min(88,lit+30)}%)`);
+  g.addColorStop(.5,`hsl(${hue},70%,${lit+10}%)`);
+  g.addColorStop(1,`hsl(${hue+18},55%,${Math.max(8,lit-15)}%)`);
+  X.beginPath();X.arc(x,y,r,0,6.28);
+  X.fillStyle=g;X.shadowBlur=r*.8;X.shadowColor=`hsl(${hue},85%,55%)`;
+  X.fill();X.restore();
+}
+
+// ── Draw a strand between two points ─────────────────────
+function strand(x1,y1,x2,y2,hue,w,a){
+  X.save();
+  X.globalAlpha=a*.6;
+  X.strokeStyle=`hsl(${hue},72%,55%)`;
+  X.lineWidth=w;X.lineCap='round';
+  X.shadowBlur=w*5;X.shadowColor=`hsl(${hue},90%,65%)`;
+  X.beginPath();X.moveTo(x1,y1);X.lineTo(x2,y2);X.stroke();
+  X.globalAlpha=a*.85;
+  X.strokeStyle=`hsl(${hue-5},50%,88%)`;
+  X.lineWidth=w*.4;X.shadowBlur=w;X.stroke();
   X.restore();
 }
 
-// ── Tendril ───────────────────────────────────────────────
-function tendril(pts,hue,thick,a){
-  if(pts.length<2||a<.01)return;
-  X.save();
-  X.globalAlpha=a*.7;
-  X.strokeStyle=`hsl(${hue},75%,52%)`;
-  X.lineWidth=thick*2;X.lineCap='round';X.lineJoin='round';
-  X.shadowBlur=thick*5;X.shadowColor=`hsl(${hue},90%,65%)`;
-  X.beginPath();X.moveTo(pts[0].x,pts[0].y);
-  for(let i=1;i<pts.length;i++){
-    if(i<pts.length-1){
-      const mx=(pts[i].x+pts[i+1].x)/2,my=(pts[i].y+pts[i+1].y)/2;
-      X.quadraticCurveTo(pts[i].x,pts[i].y,mx,my);
-    }else X.lineTo(pts[i].x,pts[i].y);
-  }
-  X.stroke();
-  X.globalAlpha=a*.9;X.strokeStyle=`hsl(${hue-5},50%,86%)`;
-  X.lineWidth=thick*.5;X.shadowBlur=thick*1.5;X.stroke();
-  X.restore();
-}
-
-// ── Node: grows + branches organically ───────────────────
-class Node{
-  constructor(x,y,col,d,angle){
-    this.x=x;this.y=y;this.col=col;this.d=d;
-    this.hue=col.hue+d*6+(Math.random()-.5)*15;
-    this.lit=18+d*9+Math.random()*10;
-    const b=[22,14,9,6,4][Math.min(d,4)];
-    this.tr=b+Math.random()*b*.5;
-    this.r=0;this.gr=.14+Math.random()*.18;
-    this.op=0;this.age=0;
-    // tendril grows from parent position toward this node
-    this.tpts=[];this.tlen=0;
-    this.tmax=20+Math.random()*30-d*3;this.tmax=Math.max(12,this.tmax);
-    this.ta=angle;this.thick=Math.max(.8,3-d*.32);
-    this.done=false;this.kids=[];this.kc=0;
-    this.mc=[4,3,2,2,1][Math.min(d,4)];
-    this.kt=18+Math.floor(Math.random()*22);
-  }
-  update(){
-    this.age++;this.op=Math.min(1,this.op+.05);
-    if(this.r<this.tr)this.r=Math.min(this.tr,this.r+this.gr);
-    // grow tendril
-    if(!this.done){
-      for(let s=0;s<2;s++){
-        if(this.tlen>=this.tmax){this.done=true;break;}
-        this.ta+=(Math.random()-.5)*.1;
-        const nx=this.x+Math.cos(this.ta)*3,ny=this.y+Math.sin(this.ta)*3;
-        this.tpts.push({x:nx,y:ny});
-        this.x=nx;this.y=ny;this.tlen+=3;
-      }
-    }
-    // spawn kids
-    if(this.done&&this.kt-->0===false){
-      this.kt=16+Math.floor(Math.random()*20);
-      if(this.kc<this.mc&&this.col.nodes.length<this.col.mx){
-        this.kc++;
-        const a=this.ta+(Math.random()-.5)*(this.d<2?1:1.4);
-        const nd=new Node(this.x,this.y,this.col,this.d+1,a);
-        this.kids.push(nd);this.col.nodes.push(nd);
-      }
-    }
-  }
-  draw(){
-    const a=this.col.op*this.op;
-    if(this.tpts.length>1)tendril(this.tpts,this.hue,this.thick,a);
-    cluster(this.x,this.y,this.r*this.op,this.hue,this.lit,a);
-  }
-}
-
-// ── Colony ────────────────────────────────────────────────
+// ── Colony: fixed structure, drawn cheaply each frame ─────
+// Key insight: store final positions, just animate opacity+radius
 class Colony{
   constructor(x,y){
-    this.x=x;this.y=y;this.op=0;this.age=0;
+    this.x=x;this.y=y;this.op=0;
     this.hue=252+Math.random()*32;
-    this.nodes=[];this.mx=20+Math.floor(Math.random()*15);
-    this.sr=0;this.str=18+Math.random()*8;
-    this.spt=50+Math.random()*40;
-    // seed arms
-    const arms=3+Math.floor(Math.random()*2);
-    for(let i=0;i<arms;i++){
-      const nd=new Node(x,y,this,(0),(i/arms)*6.28+Math.random()*.4);
-      this.nodes.push(nd);
+    this.age=0;
+    // Pre-compute all arm positions at creation — no per-frame growth logic
+    this.arms=[];
+    const numArms=3+Math.floor(Math.random()*3);
+    for(let i=0;i<numArms;i++){
+      const arm=[];
+      let ax=x,ay=y,angle=(i/numArms)*6.28+Math.random()*.5;
+      const steps=4+Math.floor(Math.random()*5);
+      for(let s=0;s<steps;s++){
+        angle+=(Math.random()-.5)*.5;
+        const dist=12+Math.random()*20;
+        ax+=Math.cos(angle)*dist; ay+=Math.sin(angle)*dist;
+        const depth=s/steps;
+        arm.push({
+          x:ax,y:ay,
+          r:(1-depth)*(10+Math.random()*12)+3,
+          hue:this.hue+s*5+(Math.random()-.5)*10,
+          lit:18+s*8+Math.random()*8
+        });
+      }
+      this.arms.push(arm);
     }
+    // Total reveal time: 2 seconds
+    this.revealFrames=120;
   }
+
   update(){
-    this.age++;this.op=Math.min(.92,this.op+.01);
-    this.sr=Math.min(this.str,this.sr+.2);
-    this.nodes.forEach(n=>n.update());
-    this.spt--;
-    if(this.spt<=0&&this.nodes.length>1){
-      this.spt=35+Math.random()*30;
-      const s=this.nodes[Math.floor(Math.random()*this.nodes.length)];
-      for(let i=0;i<3;i++)spores.push(new Spore(s.x,s.y));
-    }
+    this.age++;
+    this.op=Math.min(.92,this.age/30);
   }
+
   draw(){
-    cluster(this.x,this.y,this.sr*this.op,this.hue,16,this.op);
-    // draw large nodes first
-    [...this.nodes].sort((a,b)=>b.tr-a.tr).forEach(n=>n.draw());
+    const progress=Math.min(1,this.age/this.revealFrames);
+    // Root puff
+    puff(this.x,this.y,14*Math.min(1,this.age/20),this.hue,16,this.op);
+    // Arms — reveal progressively
+    this.arms.forEach(arm=>{
+      const visible=Math.floor(arm.length*progress);
+      let px=this.x,py=this.y;
+      for(let s=0;s<visible;s++){
+        const node=arm[s];
+        const nodeAge=this.age-(s*this.revealFrames/arm.length/this.arms.length);
+        const nodeOp=Math.min(this.op,Math.max(0,nodeAge/20));
+        strand(px,py,node.x,node.y,node.hue,Math.max(.5,2.5-s*.3),nodeOp);
+        puff(node.x,node.y,node.r*Math.min(1,nodeAge/15),node.hue,node.lit,nodeOp);
+        px=node.x;py=node.y;
+      }
+    });
   }
 }
 
+// ── Spore particle ────────────────────────────────────────
 class Spore{
   constructor(x,y){
-    this.x=x;this.y=y;this.vx=(Math.random()-.5)*.9;this.vy=-(Math.random()*.7+.1);
-    this.life=1;this.dc=.005+Math.random()*.005;this.r=.4+Math.random()*1;this.hue=252+Math.random()*32;
+    this.x=x;this.y=y;
+    this.vx=(Math.random()-.5)*.9;this.vy=-(Math.random()*.7+.1);
+    this.life=1;this.dc=.008+Math.random()*.008;
+    this.r=.5+Math.random()*.8;this.hue=252+Math.random()*32;
   }
   update(){
-    this.x+=this.vx;this.y+=this.vy;this.vy+=.008;this.life-=this.dc;
-    if(this.life<.15&&Math.random()<.003&&cols.length<14)
-      {cols.push(new Colony(this.x,this.y));this.life=0;}
+    this.x+=this.vx;this.y+=this.vy;this.vy+=.007;this.life-=this.dc;
   }
   draw(){
-    X.save();X.globalAlpha=this.life*.25;
+    X.save();X.globalAlpha=this.life*.3;
     const g=X.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r*2);
-    g.addColorStop(0,`hsl(${this.hue},65%,68%)`);g.addColorStop(1,'transparent');
+    g.addColorStop(0,`hsl(${this.hue},65%,70%)`);g.addColorStop(1,'transparent');
     X.beginPath();X.arc(this.x,this.y,this.r*2,0,6.28);X.fillStyle=g;X.fill();X.restore();
   }
 }
 
-let cols=[],spores=[],running=false,at=0;
+// ── State — hard cap to keep it fast ─────────────────────
+const MAX_COLS=10;
+let cols=[],spores=[],running=false;
+
+function addColony(x,y){
+  if(cols.length>=MAX_COLS) cols.shift(); // remove oldest
+  cols.push(new Colony(x,y));
+  for(let i=0;i<6;i++)
+    spores.push(new Spore(x+(Math.random()-.5)*20,y+(Math.random()-.5)*20));
+}
 
 function seed(){
   [[.15,.5],[.5,.38],[.8,.48],[.3,.7],[.65,.6]].forEach((p,i)=>
-    setTimeout(()=>cols.push(new Colony(C.width*p[0],C.height*p[1])),i*600+100));
+    setTimeout(()=>addColony(C.width*p[0],C.height*p[1]),i*700+100));
 }
 
 function loop(){
-  at++;if(at>100&&cols.length<14){at=0;
-    cols.push(new Colony(C.width*(.1+Math.random()*.8),C.height*(.3+Math.random()*.55)));}
   X.clearRect(0,0,C.width,C.height);
+  // Vignette
   const vg=X.createRadialGradient(C.width/2,C.height/2,C.height*.05,C.width/2,C.height/2,C.height*.9);
-  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,3,.22)');
+  vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,4,.22)');
   X.fillStyle=vg;X.fillRect(0,0,C.width,C.height);
+
   cols.forEach(c=>{c.update();c.draw();});
-  spores=spores.filter(s=>s.life>0);spores.forEach(s=>{s.update();s.draw();});
+  spores=spores.filter(s=>s.life>0);
+  if(spores.length>60)spores=spores.slice(-60); // hard cap
+  spores.forEach(s=>{s.update();s.draw();});
+
   requestAnimationFrame(loop);
 }
 
+// Touch
 C.addEventListener('pointerdown',e=>{
   if(!running)return;
   e.preventDefault();
-  cols.push(new Colony(e.clientX,e.clientY));
-  for(let i=0;i<8;i++)spores.push(new Spore(e.clientX+(Math.random()-.5)*12,e.clientY));
+  addColony(e.clientX,e.clientY);
 });
 
+// Start
 document.getElementById('btn').addEventListener('click',async()=>{
   try{
     const s=await navigator.mediaDevices.getUserMedia(
-      {video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+      {video:{facingMode:{ideal:'environment'}},audio:false});
     V.srcObject=s;await V.play();
   }catch(e){}
   const el=document.getElementById('s');
